@@ -80,6 +80,8 @@ dockers_v2:
       - linux/amd64
       - linux/arm64
     dockerfile: Dockerfile.goreleaser
+    extra_files:
+      - policies/
     labels:
       org.opencontainers.image.title: "{{ .ProjectName }}"
       org.opencontainers.image.description: "Policy-enforced sandboxed shell execution engine"
