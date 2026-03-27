@@ -1,0 +1,61 @@
+execution:
+  max_duration: 120s
+  max_output_bytes: 10485760
+  max_commands_per_script: 200
+  max_subshells: 10
+
+rate_limits:
+  global: 1000/minute
+  per_skill: {}
+
+allowed_binaries:
+  - grep
+  - sed
+  - awk
+  - sort
+  - uniq
+  - head
+  - tail
+  - wc
+  - tr
+  - cut
+  - tee
+  - cat
+  - xargs
+  - date
+  - echo
+  - printf
+  - test
+  - find
+  - ls
+  - pwd
+  - basename
+  - dirname
+  - which
+  - env
+  - true
+  - false
+
+blocked_patterns:
+  - "rm -rf /"
+  - "mkfs"
+  - "dd if="
+  - "> /dev/sda"
+
+environment:
+  inherit: false
+  static:
+    HOME: /tmp/leash
+    PATH: /usr/local/bin:/usr/bin:/bin
+
+skills:
+  enabled: []          # vide = tous les tools MCP enregistrés sont autorisés
+  require_confirmation: []
+
+# mcp_servers:
+#   - name: filesystem
+#     transport: stdio
+#     command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/"]
+#   - name: myapi
+#     transport: http
+#     url: "http://localhost:9000/mcp"

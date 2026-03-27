@@ -1,0 +1,57 @@
+execution:
+  max_duration: 30s
+  max_output_bytes: 1048576
+  max_commands_per_script: 50
+  max_subshells: 3
+
+rate_limits:
+  global: 100/minute
+  per_skill: {}
+
+allowed_binaries:
+  - grep
+  - sed
+  - awk
+  - sort
+  - uniq
+  - head
+  - tail
+  - wc
+  - tr
+  - cut
+  - tee
+  - cat
+  - xargs
+  - date
+  - echo
+  - printf
+  - test
+
+blocked_patterns:
+  - "rm -rf"
+  - "mkfs"
+  - "dd if="
+  - "> /dev/"
+  - "chmod 777"
+
+environment:
+  inherit: false
+  static:
+    HOME: /tmp/leash
+    PATH: /usr/bin:/bin
+
+skills:
+  enabled: []          # vide = tous les tools MCP enregistrés sont autorisés
+  require_confirmation: []
+
+# Exemple de configuration de serveurs MCP externes.
+# Les tools exposés par ces serveurs seront disponibles comme commandes shell.
+# Décommenter et adapter selon vos besoins.
+#
+# mcp_servers:
+#   - name: filesystem
+#     transport: stdio
+#     command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+#   - name: myapi
+#     transport: http
+#     url: "http://localhost:9000/mcp"

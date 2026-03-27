@@ -1,0 +1,9 @@
+FROM alpine:3.21
+RUN adduser -D -u 1000 leash
+WORKDIR /app
+COPY leash /app/leash
+COPY policies/ /app/policies/
+RUN mkdir -p /tmp/leash && chown leash:leash /tmp/leash
+USER leash
+ENTRYPOINT ["/app/leash"]
+CMD ["mcp", "stdio"]

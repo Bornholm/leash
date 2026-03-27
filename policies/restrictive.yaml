@@ -1,0 +1,43 @@
+execution:
+  max_duration: 10s
+  max_output_bytes: 524288
+  max_commands_per_script: 20
+  max_subshells: 1
+
+rate_limits:
+  global: 30/minute
+  per_skill: {}
+
+allowed_binaries:
+  - grep
+  - sort
+  - uniq
+  - wc
+  - cat
+  - echo
+  - printf
+
+blocked_patterns:
+  - "rm -rf"
+  - "mkfs"
+  - "dd if="
+  - "> /dev/"
+  - "chmod 777"
+  - "curl"
+  - "wget"
+  - "nc"
+
+environment:
+  inherit: false
+  static:
+    HOME: /tmp/leash
+    PATH: /usr/bin:/bin
+
+skills:
+  enabled: []          # vide = tous les tools MCP enregistrés sont autorisés
+  require_confirmation: []
+
+# mcp_servers:
+#   - name: myserver
+#     transport: stdio
+#     command: ["mon-serveur-mcp"]
