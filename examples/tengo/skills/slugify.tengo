@@ -1,0 +1,29 @@
+/* skill
+name: slugify
+description: Converts a string to a URL-friendly slug (lowercase, hyphens)
+category: text
+args:
+  - name: text
+    description: Text to slugify
+    required: true
+flags:
+  - name: separator
+    short: s
+    default: "-"
+    description: Word separator
+    pattern: "^[-_.]$"
+examples:
+  - title: Simple slug
+    command: slugify "Hello World"
+  - title: Custom separator
+    command: slugify --separator=_ "Hello World"
+*/
+
+text := import("text")
+
+sep := flags["separator"]
+result := text.to_lower(args[0])
+result = text.re_replace(`[^a-z0-9]+`, result, sep)
+result = text.trim(result, sep)
+
+write(result + "\n")

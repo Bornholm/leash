@@ -1,0 +1,26 @@
+/* skill
+name: repeat
+description: Repeats each stdin line N times
+category: text
+args:
+  - name: count
+    description: Number of repetitions
+    required: true
+    pattern: "^[1-9][0-9]*$"
+examples:
+  - title: Repeat 3 times
+    command: echo "hello" | repeat 3
+*/
+
+n := int(args[0])
+if n == 0 {
+    exit_code = 1
+} else {
+    for {
+        line := stdin()
+        if line == "" { break }
+        for i := 0; i < n; i++ {
+            write(line + "\n")
+        }
+    }
+}

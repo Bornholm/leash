@@ -13,6 +13,8 @@ import (
 	"github.com/bornholm/leash/internal/security"
 	mcptransport "github.com/bornholm/leash/internal/transport/mcp"
 	repltransport "github.com/bornholm/leash/internal/transport/repl"
+	skillshell "github.com/bornholm/leash/pkg/skill/shell"
+	skilltengo "github.com/bornholm/leash/pkg/skill/tengo"
 	"github.com/spf13/cobra"
 )
 
@@ -27,6 +29,8 @@ func main() {
 
 var policyFile string
 var auditLogFile string
+var tengoSkillDirs []string
+var shellSkillDirs []string
 
 var rootCmd = &cobra.Command{
 	Use:   "leash",
@@ -38,6 +42,8 @@ func init() {
 		envOr("LEASH_POLICY", "policies/default.yaml"), "Fichier de politique YAML")
 	rootCmd.PersistentFlags().StringVarP(&auditLogFile, "audit-log", "A",
 		envOr("LEASH_AUDIT_LOG", ""), "Fichier de destination de l'audit log JSON (stderr si vide)")
+	rootCmd.PersistentFlags().StringArrayVar(&tengoSkillDirs, "tengo-skills", nil, "Répertoire(s) de skills Tengo (*.tengo)")
+	rootCmd.PersistentFlags().StringArrayVar(&shellSkillDirs, "shell-skills", nil, "Répertoire(s) de skills shell (*.sh)")
 
 	rootCmd.AddCommand(replCmd, mcpCmd, execCmd)
 	mcpCmd.AddCommand(mcpStdioCmd, mcpHTTPCmd)
@@ -104,8 +110,9 @@ func init() {
 var execScript string
 
 var execCmd = &cobra.Command{
-	Use:   "exec",
-	Short: "Exécuter un script (argument ou stdin)",
+	Use:   "exec [script-file]",
+	Short: "Exécuter un script (fichier, --exec ou stdin)",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		eng, cleanup, err := buildEngine(cmd.Context(), policyFile, auditLogFile)
 		if err != nil {
@@ -113,8 +120,17 @@ var execCmd = &cobra.Command{
 		}
 		defer cleanup()
 
-		script := execScript
-		if script == "" {
+		var script string
+		switch {
+		case execScript != "":
+			script = execScript
+		case len(args) == 1:
+			data, err := os.ReadFile(args[0])
+			if err != nil {
+				return fmt.Errorf("reading script file %q: %w", args[0], err)
+			}
+			script = string(data)
+		default:
 			data, err := io.ReadAll(os.Stdin)
 			if err != nil {
 				return fmt.Errorf("reading stdin: %w", err)
@@ -159,6 +175,34 @@ func buildEngine(ctx context.Context, polFile, auditLog string) (engine.Engine, 
 	rl := security.NewRateLimiter(polCfg)
 
 	reg := registry.New()
+
+	for _, dir := range tengoSkillDirs {
+		skills, err := skilltengo.LoadDir(dir)
+		if err != nil {
+			auditCloser()
+			return nil, nil, fmt.Errorf("chargement des skills Tengo depuis %q : %w", dir, err)
+		}
+		for _, sk := range skills {
+			if err := reg.Register(sk); err != nil {
+				auditCloser()
+				return nil, nil, fmt.Errorf("enregistrement du skill Tengo %q : %w", sk.Name, err)
+			}
+		}
+	}
+
+	for _, dir := range shellSkillDirs {
+		skills, err := skillshell.LoadDir(dir)
+		if err != nil {
+			auditCloser()
+			return nil, nil, fmt.Errorf("chargement des skills shell depuis %q : %w", dir, err)
+		}
+		for _, sk := range skills {
+			if err := reg.Register(sk); err != nil {
+				auditCloser()
+				return nil, nil, fmt.Errorf("enregistrement du skill shell %q : %w", sk.Name, err)
+			}
+		}
+	}
 
 	servers, err := mcpregistry.LoadFromConfig(ctx, polCfg.MCPServers, reg)
 	if err != nil {

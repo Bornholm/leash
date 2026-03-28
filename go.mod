@@ -12,6 +12,7 @@ require (
 )
 
 require (
+	github.com/d5/tengo/v2 v2.17.0 // indirect
 	github.com/google/jsonschema-go v0.4.2 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/itchyny/timefmt-go v0.1.7 // indirect

@@ -7,6 +7,8 @@ import (
 
 	"github.com/bornholm/leash/internal/security"
 	"github.com/bornholm/leash/pkg/skill"
+	skillshell "github.com/bornholm/leash/pkg/skill/shell"
+	skilltengo "github.com/bornholm/leash/pkg/skill/tengo"
 )
 
 // Option est une fonction de configuration pour New().
@@ -135,6 +137,58 @@ func WithSkills(skills ...*skill.Skill) Option {
 			}
 			c.skills = append(c.skills, s)
 		}
+		return nil
+	}
+}
+
+// WithTengoSkill compile un script Tengo et enregistre le skill résultant dans l'Engine.
+// src est le contenu complet du fichier (frontmatter YAML + corps du script).
+func WithTengoSkill(src []byte) Option {
+	return func(c *config) error {
+		sk, err := skilltengo.LoadScript(src)
+		if err != nil {
+			return fmt.Errorf("leash: WithTengoSkill: %w", err)
+		}
+		c.skills = append(c.skills, sk)
+		return nil
+	}
+}
+
+// WithTengoSkillDir charge tous les fichiers *.tengo d'un répertoire comme skills Tengo.
+// Les erreurs de compilation de chaque fichier sont agrégées et retournées.
+func WithTengoSkillDir(dir string) Option {
+	return func(c *config) error {
+		skills, err := skilltengo.LoadDir(dir)
+		if err != nil {
+			return fmt.Errorf("leash: WithTengoSkillDir: %w", err)
+		}
+		c.skills = append(c.skills, skills...)
+		return nil
+	}
+}
+
+// WithShellSkill charge un script shell et enregistre le skill résultant dans l'Engine.
+// src est le contenu complet du fichier (frontmatter heredoc + corps du script).
+func WithShellSkill(src []byte) Option {
+	return func(c *config) error {
+		sk, err := skillshell.LoadScript(src)
+		if err != nil {
+			return fmt.Errorf("leash: WithShellSkill: %w", err)
+		}
+		c.skills = append(c.skills, sk)
+		return nil
+	}
+}
+
+// WithShellSkillDir charge tous les fichiers *.sh d'un répertoire comme skills shell.
+// Les erreurs de chaque fichier sont agrégées et retournées.
+func WithShellSkillDir(dir string) Option {
+	return func(c *config) error {
+		skills, err := skillshell.LoadDir(dir)
+		if err != nil {
+			return fmt.Errorf("leash: WithShellSkillDir: %w", err)
+		}
+		c.skills = append(c.skills, skills...)
 		return nil
 	}
 }

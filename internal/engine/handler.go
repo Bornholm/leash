@@ -45,6 +45,13 @@ func NewExecHandler(
 
 				key := recorder.Start(name, args[1:], true)
 				call := buildCall(args[1:], sk.Flags, hc)
+
+				if err := skill.Validate(sk, call); err != nil {
+					fmt.Fprintf(hc.Stderr, "leash: %s: %v\n", name, err)
+					recorder.Finish(key, 1)
+					return interp.ExitStatus(1)
+				}
+
 				err := sk.Handler(ctx, call)
 
 				exitCode := 0

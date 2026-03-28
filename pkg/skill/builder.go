@@ -31,9 +31,27 @@ func (b *Builder) Arg(name, desc string, required bool) *Builder {
 	return b
 }
 
+// ArgPattern définit un pattern regexp de validation sur le dernier Arg ajouté.
+// Doit être appelé immédiatement après Arg().
+func (b *Builder) ArgPattern(pattern string) *Builder {
+	if len(b.s.Args) > 0 {
+		b.s.Args[len(b.s.Args)-1].Pattern = pattern
+	}
+	return b
+}
+
 // Flag ajoute un flag optionnel avec sa valeur par défaut.
 func (b *Builder) Flag(name, short, defaultVal, desc string) *Builder {
 	b.s.Flags = append(b.s.Flags, FlagDef{Name: name, Short: short, Default: defaultVal, Description: desc})
+	return b
+}
+
+// FlagPattern définit un pattern regexp de validation sur le dernier Flag ajouté.
+// Doit être appelé immédiatement après Flag().
+func (b *Builder) FlagPattern(pattern string) *Builder {
+	if len(b.s.Flags) > 0 {
+		b.s.Flags[len(b.s.Flags)-1].Pattern = pattern
+	}
 	return b
 }
 

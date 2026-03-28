@@ -47,6 +47,7 @@ type ArgDef struct {
 	Name        string
 	Description string
 	Required    bool
+	Pattern     string // regexp de validation de la valeur ; vide = aucune validation
 }
 
 // FlagDef décrit un flag optionnel d'un skill.
@@ -55,6 +56,7 @@ type FlagDef struct {
 	Short       string
 	Default     string
 	Description string
+	Pattern     string // regexp de validation de la valeur ; vide = aucune validation
 }
 
 // Example illustre un cas d'usage d'un skill.
