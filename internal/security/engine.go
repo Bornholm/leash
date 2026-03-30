@@ -131,6 +131,11 @@ func (p *policyEngine) SafeEnvironment() map[string]string {
 	for k, v := range p.cfg.Environment.Static {
 		env[k] = v
 	}
+	for _, key := range p.cfg.Environment.Passthrough {
+		if val, ok := os.LookupEnv(key); ok {
+			env[key] = val
+		}
+	}
 	return env
 }
 

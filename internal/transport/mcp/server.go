@@ -225,7 +225,10 @@ func (ms *MCPServer) makeSkillHandler(sk *skill.Skill) mcp.ToolHandler {
 		var args map[string]any
 		if len(req.Params.Arguments) > 0 {
 			if err := json.Unmarshal(req.Params.Arguments, &args); err != nil {
-				return errorResult("invalid parameters: " + err.Error()), nil
+				return errorResult(fmt.Sprintf(
+					"Invalid parameter format for skill %q: %v\nExpected a single JSON object with the following fields:\n%s",
+					sk.Name, err, describeExpectedParams(sk),
+				)), nil
 			}
 		}
 
@@ -249,11 +252,46 @@ func (ms *MCPServer) makeSkillHandler(sk *skill.Skill) mcp.ToolHandler {
 			return errorResult(fmt.Sprintf("execution error: %v", err)), nil
 		}
 
+		var sb strings.Builder
+		if len(result.Stdout) > 0 {
+			sb.Write(result.Stdout)
+		}
+		if len(result.Stderr) > 0 {
+			if sb.Len() > 0 {
+				sb.WriteString("\n")
+			}
+			sb.WriteString("## STDERR\n")
+			sb.Write(result.Stderr)
+		}
+		if result.ExitCode != 0 {
+			fmt.Fprintf(&sb, "\n## EXIT CODE\n%d\n", result.ExitCode)
+		}
+
 		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: string(result.Stdout)}},
+			Content: []mcp.Content{&mcp.TextContent{Text: sb.String()}},
 			IsError: result.ExitCode != 0,
 		}, nil
 	}
+}
+
+// describeExpectedParams génère une description textuelle des paramètres attendus pour un skill.
+func describeExpectedParams(sk *skill.Skill) string {
+	var sb strings.Builder
+	for _, arg := range sk.Args {
+		req := ""
+		if arg.Required {
+			req = " (required)"
+		}
+		fmt.Fprintf(&sb, "  - %q: string%s — %s\n", arg.Name, req, arg.Description)
+	}
+	for _, flag := range sk.Flags {
+		def := ""
+		if flag.Default != "" {
+			def = fmt.Sprintf(", default: %q", flag.Default)
+		}
+		fmt.Fprintf(&sb, "  - %q: string%s — %s\n", flag.Name, def, flag.Description)
+	}
+	return sb.String()
 }
 
 func errorResult(msg string) *mcp.CallToolResult {

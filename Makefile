@@ -1,6 +1,6 @@
 .PHONY: build test lint run-repl run-mcp clean
 
-BINARY := leash
+BINARY := bin/leash
 CMD := ./cmd/leash
 POLICY ?= policies/default.yaml
 MCP_ADDR ?= :8080

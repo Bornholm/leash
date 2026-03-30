@@ -1,7 +1,6 @@
 package repl
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"github.com/bornholm/leash/internal/engine"
+	"github.com/peterh/liner"
 )
 
 // ErrQuit signale que l'utilisateur souhaite quitter.
@@ -28,35 +28,60 @@ type REPL struct {
 	eng        engine.Engine
 	policyName string
 	history    []HistoryEntry
-	scanner    *bufio.Scanner
 	out        io.Writer
+	err        io.Writer
 	lastAudit  *engine.ExecResult
+	liner      *liner.State
 }
 
 // New crée un REPL.
 func New(eng engine.Engine, policyName string) *REPL {
-	return &REPL{
+	l := liner.NewLiner()
+	l.SetCtrlCAborts(true)
+
+	r := &REPL{
 		eng:        eng,
 		policyName: policyName,
-		scanner:    bufio.NewScanner(os.Stdin),
 		out:        os.Stdout,
+		err:        os.Stderr,
+		liner:      l,
 	}
+
+	completer := NewCompleter(eng.Registry())
+	l.SetCompleter(func(line string) []string {
+		// Complétion uniquement sur un token unique (nom de commande/skill)
+		if strings.Contains(strings.TrimSpace(line), " ") {
+			return nil
+		}
+		return completer.Complete(strings.TrimSpace(line))
+	})
+
+	return r
 }
 
 // Run démarre la boucle interactive.
 func (r *REPL) Run() error {
+	defer r.liner.Close()
+
 	fmt.Fprintf(r.out, "LeaSH — policy: %s\nType :help for commands, :quit to exit.\n\n", r.policyName)
 
 	for {
-		fmt.Fprintf(r.out, "[%s] leash> ", r.policyName)
-
-		if !r.scanner.Scan() {
-			break
+		prompt := fmt.Sprintf("[%s] leash> ", r.policyName)
+		line, err := r.liner.Prompt(prompt)
+		if err != nil {
+			if errors.Is(err, liner.ErrPromptAborted) || errors.Is(err, io.EOF) {
+				fmt.Fprintln(r.out, "Bye.")
+				return nil
+			}
+			return err
 		}
-		line := strings.TrimSpace(r.scanner.Text())
+
+		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
+
+		r.liner.AppendHistory(line)
 
 		if err := r.dispatch(line); err != nil {
 			if errors.Is(err, ErrQuit) {
@@ -66,7 +91,6 @@ func (r *REPL) Run() error {
 			fmt.Fprintf(r.out, "error: %v\n", err)
 		}
 	}
-	return r.scanner.Err()
 }
 
 func (r *REPL) dispatch(line string) error {
@@ -106,14 +130,27 @@ func (r *REPL) execScript(script string) error {
 
 	r.lastAudit = result
 
-	if len(result.Stdout) > 0 {
-		fmt.Fprint(r.out, string(result.Stdout))
-		if !strings.HasSuffix(string(result.Stdout), "\n") {
+	if len(result.Combined) > 0 {
+		for _, chunk := range result.Combined {
+			if chunk.IsStderr {
+				r.err.Write(chunk.Data) //nolint:errcheck
+			} else {
+				r.out.Write(chunk.Data) //nolint:errcheck
+			}
+		}
+		if len(result.Stdout) > 0 && !strings.HasSuffix(string(result.Stdout), "\n") {
 			fmt.Fprintln(r.out)
 		}
-	}
-	if len(result.Stderr) > 0 {
-		fmt.Fprint(r.out, string(result.Stderr))
+	} else {
+		if len(result.Stdout) > 0 {
+			fmt.Fprint(r.out, string(result.Stdout))
+			if !strings.HasSuffix(string(result.Stdout), "\n") {
+				fmt.Fprintln(r.out)
+			}
+		}
+		if len(result.Stderr) > 0 {
+			fmt.Fprint(r.err, string(result.Stderr))
+		}
 	}
 	if result.ExitCode != 0 {
 		fmt.Fprintf(r.out, "[exit %d]\n", result.ExitCode)

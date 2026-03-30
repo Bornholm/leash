@@ -75,8 +75,9 @@ type PolicyConfig struct {
 	AllowedBinaries []string `yaml:"allowed_binaries"`
 	BlockedPatterns []string `yaml:"blocked_patterns"`
 	Environment struct {
-		Inherit bool              `yaml:"inherit"`
-		Static  map[string]string `yaml:"static"`
+		Inherit     bool              `yaml:"inherit"`
+		Static      map[string]string `yaml:"static"`
+		Passthrough []string          `yaml:"passthrough"`
 	} `yaml:"environment"`
 	Skills struct {
 		Enabled             []string `yaml:"enabled"`

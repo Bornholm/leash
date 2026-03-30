@@ -40,6 +40,9 @@ type Call struct {
 	// Env retourne la valeur d'une variable d'environnement du script en cours.
 	// Utiliser une fonction évite de copier tout l'environnement à chaque appel.
 	Env func(string) string
+	// SafeEnv contient les variables d'environnement validées par la policy
+	// (static + passthrough). À utiliser pour construire l'env des sous-processus.
+	SafeEnv map[string]string
 }
 
 // ArgDef décrit un argument positionnel d'un skill.

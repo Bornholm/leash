@@ -25,12 +25,18 @@ func MakeHandler(skillName string, interpreter string, src []byte) skill.Handler
 		cmdArgs := append([]string{"-c", string(src), skillName}, c.Args...)
 		cmd := exec.CommandContext(ctx, interpreter, cmdArgs...)
 
-		// Environnement minimal : PATH + flags sous forme LEASH_FLAG_*.
-		env := make([]string, 0, 1+len(c.Flags))
-		if path, ok := os.LookupEnv("PATH"); ok {
-			env = append(env, "PATH="+path)
-		} else {
-			env = append(env, "PATH=/usr/bin:/bin")
+		// Environnement : SafeEnv de la policy (static + passthrough) + LEASH_FLAG_*.
+		// SafeEnv fournit PATH, HOME et toute variable explicitement autorisée (ex: SSH_AUTH_SOCK).
+		env := make([]string, 0, len(c.SafeEnv)+len(c.Flags))
+		for k, v := range c.SafeEnv {
+			env = append(env, k+"="+v)
+		}
+		if _, hasPATH := c.SafeEnv["PATH"]; !hasPATH {
+			if path, ok := os.LookupEnv("PATH"); ok {
+				env = append(env, "PATH="+path)
+			} else {
+				env = append(env, "PATH=/usr/bin:/bin")
+			}
 		}
 		for name, val := range c.Flags {
 			envKey := "LEASH_FLAG_" + strings.ToUpper(strings.ReplaceAll(name, "-", "_"))

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"strings"
 
 	"mvdan.cc/sh/v3/interp"
 
@@ -34,6 +36,12 @@ func NewExecHandler(
 
 			// 1. Skill enregistré ?
 			if sk, ok := reg.Get(name); ok {
+				// --help / -h : afficher l'aide sans exécuter le skill
+				if isHelpRequest(args[1:]) {
+					printSkillHelp(sk, hc.Stdout)
+					return nil
+				}
+
 				if err := pol.CanExecuteSkill(ctx, name, args[1:]); err != nil {
 					fmt.Fprintf(hc.Stderr, "leash: %s: %v\n", name, err)
 					return interp.ExitStatus(126)
@@ -44,7 +52,7 @@ func NewExecHandler(
 				}
 
 				key := recorder.Start(name, args[1:], true)
-				call := buildCall(args[1:], sk.Flags, hc)
+				call := buildCall(args[1:], sk.Flags, hc, pol.SafeEnvironment())
 
 				if err := skill.Validate(sk, call); err != nil {
 					fmt.Fprintf(hc.Stderr, "leash: %s: %v\n", name, err)
@@ -96,9 +104,77 @@ func NewExecHandler(
 	}
 }
 
+// isHelpRequest retourne true si --help ou -h figure dans les arguments.
+func isHelpRequest(args []string) bool {
+	for _, a := range args {
+		if a == "--help" || a == "-h" {
+			return true
+		}
+	}
+	return false
+}
+
+// printSkillHelp écrit l'aide formatée d'un skill sur w.
+func printSkillHelp(sk *skill.Skill, w io.Writer) {
+	// Ligne d'usage
+	var usage strings.Builder
+	usage.WriteString(sk.Name)
+	for _, arg := range sk.Args {
+		if arg.Required {
+			fmt.Fprintf(&usage, " <%s>", arg.Name)
+		} else {
+			fmt.Fprintf(&usage, " [%s]", arg.Name)
+		}
+	}
+	if len(sk.Flags) > 0 {
+		usage.WriteString(" [flags]")
+	}
+	fmt.Fprintf(w, "Usage: %s\n", usage.String())
+
+	if sk.Description != "" {
+		fmt.Fprintf(w, "\n%s\n", sk.Description)
+	}
+
+	if len(sk.Args) > 0 {
+		fmt.Fprintln(w, "\nArguments:")
+		for _, arg := range sk.Args {
+			req := ""
+			if arg.Required {
+				req = " (required)"
+			}
+			fmt.Fprintf(w, "  %-16s %s%s\n", arg.Name, arg.Description, req)
+		}
+	}
+
+	if len(sk.Flags) > 0 {
+		fmt.Fprintln(w, "\nFlags:")
+		for _, flag := range sk.Flags {
+			nameCol := "--" + flag.Name
+			if flag.Short != "" {
+				nameCol += ", -" + flag.Short
+			}
+			def := ""
+			if flag.Default != "" {
+				def = fmt.Sprintf(" (default: %q)", flag.Default)
+			}
+			fmt.Fprintf(w, "  %-20s %s%s\n", nameCol, flag.Description, def)
+		}
+	}
+
+	if len(sk.Examples) > 0 {
+		fmt.Fprintln(w, "\nExamples:")
+		for _, ex := range sk.Examples {
+			if ex.Title != "" {
+				fmt.Fprintf(w, "  # %s\n", ex.Title)
+			}
+			fmt.Fprintf(w, "  %s\n", ex.Command)
+		}
+	}
+}
+
 // buildCall construit un skill.Call depuis les arguments et le contexte mvdan.
 // Les streams sont câblés sur les streams actifs du shell (pour que les pipes fonctionnent).
-func buildCall(args []string, flagDefs []skill.FlagDef, hc interp.HandlerContext) *skill.Call {
+func buildCall(args []string, flagDefs []skill.FlagDef, hc interp.HandlerContext, safeEnv map[string]string) *skill.Call {
 	positional, flags, err := skill.ParseFlags(flagDefs, args)
 	if err != nil {
 		// En cas d'erreur de parsing, passer les args bruts comme positionnels
@@ -106,11 +182,12 @@ func buildCall(args []string, flagDefs []skill.FlagDef, hc interp.HandlerContext
 		flags = make(map[string]string)
 	}
 	return &skill.Call{
-		Args:   positional,
-		Flags:  flags,
-		Stdin:  hc.Stdin,
-		Stdout: hc.Stdout,
-		Stderr: hc.Stderr,
-		Env:    func(key string) string { return hc.Env.Get(key).String() },
+		Args:    positional,
+		Flags:   flags,
+		Stdin:   hc.Stdin,
+		Stdout:  hc.Stdout,
+		Stderr:  hc.Stderr,
+		Env:     func(key string) string { return hc.Env.Get(key).String() },
+		SafeEnv: safeEnv,
 	}
 }

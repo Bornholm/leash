@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	"mvdan.cc/sh/v3/expand"
@@ -40,13 +41,37 @@ func New(
 	}
 }
 
+// muxWriter écrit vers dst et enregistre chaque fragment dans combined (thread-safe).
+type muxWriter struct {
+	mu       *sync.Mutex
+	combined *[]OutputChunk
+	isStderr bool
+	dst      io.Writer
+}
+
+func (w *muxWriter) Write(p []byte) (int, error) {
+	chunk := make([]byte, len(p))
+	copy(chunk, p)
+	w.mu.Lock()
+	*w.combined = append(*w.combined, OutputChunk{IsStderr: w.isStderr, Data: chunk})
+	w.mu.Unlock()
+	return w.dst.Write(p)
+}
+
 // Exec implémente Engine.Exec.
 func (r *Runner) Exec(ctx context.Context, script string) (*ExecResult, error) {
 	var stdout, stderr bytes.Buffer
-	result, err := r.ExecWithStreams(ctx, script, strings.NewReader(""), &stdout, &stderr)
+	var mu sync.Mutex
+	var combined []OutputChunk
+
+	muxOut := &muxWriter{mu: &mu, combined: &combined, isStderr: false, dst: &stdout}
+	muxErr := &muxWriter{mu: &mu, combined: &combined, isStderr: true, dst: &stderr}
+
+	result, err := r.ExecWithStreams(ctx, script, strings.NewReader(""), muxOut, muxErr)
 	if result != nil {
 		result.Stdout = stdout.Bytes()
 		result.Stderr = stderr.Bytes()
+		result.Combined = combined
 	}
 	return result, err
 }

@@ -39,6 +39,9 @@ environment:
   static:
     HOME: /tmp/leash
     PATH: /usr/bin:/bin
+  # passthrough: liste de variables de l'environnement hôte à transmettre.
+  # Utile par exemple pour SSH_AUTH_SOCK (agent SSH) ou TERM.
+  passthrough: []
 
 skills:
   enabled: []          # vide = tous les tools MCP enregistrés sont autorisés

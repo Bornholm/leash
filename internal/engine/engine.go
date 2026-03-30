@@ -24,11 +24,18 @@ type Engine interface {
 	Policy() security.PolicyEngine
 }
 
+// OutputChunk représente un fragment de sortie avec son origine (stdout ou stderr).
+type OutputChunk struct {
+	IsStderr bool
+	Data     []byte
+}
+
 // ExecResult contient le résultat d'une exécution shell.
 // AuditTrail et CommandRecord sont définis dans internal/security pour éviter les cycles d'import.
 type ExecResult struct {
 	Stdout   []byte
 	Stderr   []byte
+	Combined []OutputChunk // stdout + stderr entrelacés dans l'ordre d'écriture
 	ExitCode int
 	Duration time.Duration
 	Audit    *security.AuditTrail
