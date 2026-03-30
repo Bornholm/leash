@@ -44,6 +44,7 @@ import (
 	"strings"
 
 	"github.com/bornholm/leash/pkg/skill"
+	"github.com/bornholm/leash/pkg/skill/tengo/modules"
 	tengosdk "github.com/d5/tengo/v2"
 	"github.com/d5/tengo/v2/stdlib"
 )
@@ -64,7 +65,9 @@ func LoadScript(src []byte) (*skill.Skill, error) {
 	}
 
 	s := tengosdk.NewScript(body)
-	s.SetImports(stdlib.GetModuleMap(allowedModules...))
+	moduleMap := stdlib.GetModuleMap(allowedModules...)
+	moduleMap.AddBuiltinModule("http", modules.HTTPModule)
+	s.SetImports(moduleMap)
 
 	// Pré-déclarer toutes les variables injectées au runtime.
 	// Tengo requiert que les variables soient déclarées avant la compilation

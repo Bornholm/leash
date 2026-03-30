@@ -105,6 +105,82 @@ for {
 | `examples[].title` | string | Example title |
 | `examples[].command` | string | Example invocation |
 
+## Module `http`
+
+The `http` module lets skills call remote HTTP services.
+
+```tengo
+http := import("http")
+```
+
+### Functions
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `get` | `(url [, headers])` | HTTP GET |
+| `post` | `(url, body, content_type [, headers])` | HTTP POST with body |
+| `put` | `(url, body, content_type [, headers])` | HTTP PUT with body |
+| `delete` | `(url [, headers])` | HTTP DELETE |
+| `request` | `(method, url, body, content_type, headers)` | Generic request |
+
+`headers` is a `map` of string values. `body` and `content_type` can be `""` when empty.
+Requests time out after **30 seconds**.
+
+### Response object
+
+All functions return an immutable map:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `status` | `int` | HTTP status code (0 if network error) |
+| `body` | `string` | Response body |
+| `err` | `string` | Error message, empty on success |
+| `headers` | `map` | Response headers (Canonical-Form keys, e.g. `"Content-Type"`) |
+
+> **Note:** The field is named `err`, not `error` — `error` is a reserved keyword in Tengo.
+
+### Examples
+
+```tengo
+http := import("http")
+
+// Simple GET
+resp := http.get("https://api.example.com/users")
+if resp.err != "" {
+    ewrite("request failed: " + resp.err + "\n")
+    exit_code = 1
+} else {
+    write(resp.body + "\n")
+}
+
+// GET with custom headers
+resp := http.get("https://api.example.com/users", {
+    "Authorization": "Bearer " + env("API_TOKEN")
+})
+
+// POST JSON
+resp := http.post(
+    "https://api.example.com/users",
+    `{"name":"alice"}`,
+    "application/json"
+)
+write(string(resp.status) + "\n")  // e.g. "201"
+
+// POST with extra headers
+resp := http.post(
+    "https://api.example.com/users",
+    `{"name":"alice"}`,
+    "application/json",
+    {"X-Request-ID": "abc-123"}
+)
+
+// Access a response header
+ct := resp.headers["Content-Type"]
+
+// Generic request (e.g. PATCH)
+resp := http.request("PATCH", "https://api.example.com/users/1", `{"name":"bob"}`, "application/json", {})
+```
+
 ## Complete example
 
 ```tengo
