@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Bornholm/leash/refs/heads/master/misc/assets/logo.svg" width="256px" alt="Logo"/>
+</p>
+
 # LeaSH — **L**LM **E**xecution **A**udited **SH**ell
 
 A policy-enforced shell execution engine for LLMs and agents.
