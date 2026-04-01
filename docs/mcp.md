@@ -22,7 +22,6 @@ LeaSH can run as an [MCP](https://modelcontextprotocol.io) server, exposing the 
 |------|-------------|
 | `execute_shell` | Run an arbitrary sandboxed script; returns stdout, stderr, exit code, and any BLOCKED messages |
 | `list_commands` | Return the manifest of available commands as Markdown (useful for LLM system prompts) |
-| `skill_<name>` | One tool per registered skill, auto-generated from skill metadata |
 
 ## Client configuration
 

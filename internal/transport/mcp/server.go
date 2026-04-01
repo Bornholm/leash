@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/bornholm/leash/internal/engine"
-	"github.com/bornholm/leash/pkg/skill"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -36,46 +35,19 @@ func New(eng engine.Engine) *MCPServer {
 func buildInstructions(eng engine.Engine) string {
 	var sb strings.Builder
 
-	sb.WriteString(`LeaSH is a policy-enforced sandbox that lets you run shell commands and skills safely.
+	sb.WriteString(`LeaSH is a policy-enforced sandbox that lets you run shell commands safely.
 Scripts that violate the active policy are blocked and return exit code 127.
 
 ## Tools
 
 ### execute_shell
-Run an arbitrary shell script. Use this for ad-hoc commands, pipelines, or when no skill matches your intent.
+Run an arbitrary shell script. Use this for all operations — commands, pipelines, scripts, or skills.
 The response contains sections ## STDOUT, ## STDERR, ## EXIT CODE, and ## BLOCKED (if commands were blocked).
 
 ### list_commands
 Returns full documentation for every registered skill. Call this when you are unsure of a skill's exact arguments or flags.
 
-### skill_<name>
-One dedicated tool per registered skill. Prefer these over execute_shell when a matching skill exists — they validate inputs and map directly to sandbox commands.
-
 `)
-
-	var skillLines []string
-	eng.Registry().ForEach(func(sk *skill.Skill) {
-		line := fmt.Sprintf("- **skill_%s**", sk.Name)
-		if sk.Description != "" {
-			line += ": " + sk.Description
-		}
-		if sk.Usage != "" {
-			line += " — usage: `" + sk.Usage + "`"
-		}
-		skillLines = append(skillLines, line)
-	})
-
-	if len(skillLines) == 0 {
-		sb.WriteString("## Registered skills\nNo skills are currently registered. Use execute_shell for all operations.\n")
-	} else {
-		sb.WriteString("## Registered skills\n")
-		for _, l := range skillLines {
-			sb.WriteString(l + "\n")
-		}
-		sb.WriteString("\nCall list_commands to get the full argument/flag documentation for any skill.\n")
-	}
-
-	sb.WriteString("\n")
 
 	binaries := eng.Policy().AllowedBinaries()
 	if len(binaries) == 0 {
@@ -91,7 +63,7 @@ One dedicated tool per registered skill. Prefer these over execute_shell when a 
 	sb.WriteString(`
 ## Decision guide
 
-1. Does a skill_* tool match what you need? → use it.
+1. Want to run a skill? → use execute_shell with the skill name and its arguments.
 2. Need to chain multiple commands or use shell features (pipes, loops)? → use execute_shell.
 3. Unsure what skills are available or how to call one? → call list_commands first.
 4. A command returns exit code 127? → it was blocked by policy; do not retry it as-is.
@@ -143,12 +115,6 @@ func (ms *MCPServer) registerTools() {
 		},
 		ms.handleListCommands,
 	)
-
-	// Un tool par skill enregistré
-	ms.eng.Registry().ForEach(func(sk *skill.Skill) {
-		skCopy := sk
-		ms.server.AddTool(skillToMCPTool(sk), ms.makeSkillHandler(skCopy))
-	})
 }
 
 func (ms *MCPServer) handleExecuteShell(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -218,80 +184,6 @@ func (ms *MCPServer) handleListCommands(_ context.Context, _ *mcp.CallToolReques
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{&mcp.TextContent{Text: sb.String()}},
 	}, nil
-}
-
-func (ms *MCPServer) makeSkillHandler(sk *skill.Skill) mcp.ToolHandler {
-	return func(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		var args map[string]any
-		if len(req.Params.Arguments) > 0 {
-			if err := json.Unmarshal(req.Params.Arguments, &args); err != nil {
-				return errorResult(fmt.Sprintf(
-					"Invalid parameter format for skill %q: %v\nExpected a single JSON object with the following fields:\n%s",
-					sk.Name, err, describeExpectedParams(sk),
-				)), nil
-			}
-		}
-
-		// Build the shell script that calls the skill
-		var cmdParts []string
-		cmdParts = append(cmdParts, sk.Name)
-		for _, arg := range sk.Args {
-			if val, ok := args[arg.Name].(string); ok && val != "" {
-				cmdParts = append(cmdParts, fmt.Sprintf("%q", val))
-			}
-		}
-		for _, flag := range sk.Flags {
-			if val, ok := args[flag.Name].(string); ok && val != "" && val != flag.Default {
-				cmdParts = append(cmdParts, fmt.Sprintf("--%s=%q", flag.Name, val))
-			}
-		}
-		script := strings.Join(cmdParts, " ")
-
-		result, err := ms.eng.Exec(context.Background(), script)
-		if err != nil {
-			return errorResult(fmt.Sprintf("execution error: %v", err)), nil
-		}
-
-		var sb strings.Builder
-		if len(result.Stdout) > 0 {
-			sb.Write(result.Stdout)
-		}
-		if len(result.Stderr) > 0 {
-			if sb.Len() > 0 {
-				sb.WriteString("\n")
-			}
-			sb.WriteString("## STDERR\n")
-			sb.Write(result.Stderr)
-		}
-		if result.ExitCode != 0 {
-			fmt.Fprintf(&sb, "\n## EXIT CODE\n%d\n", result.ExitCode)
-		}
-
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: sb.String()}},
-			IsError: result.ExitCode != 0,
-		}, nil
-	}
-}
-
-// describeExpectedParams génère une description textuelle des paramètres attendus pour un skill.
-func describeExpectedParams(sk *skill.Skill) string {
-	var sb strings.Builder
-	for _, arg := range sk.Args {
-		req := ""
-		if arg.Required {
-			req = " (required)"
-		}
-		fmt.Fprintf(&sb, "  - %q: string%s — %s\n", arg.Name, req, arg.Description)
-	}
-	for _, flag := range sk.Flags {
-		def := ""
-		if flag.Default != "" {
-			def = fmt.Sprintf(", default: %q", flag.Default)
-		}
-		fmt.Fprintf(&sb, "  - %q: string%s — %s\n", flag.Name, def, flag.Description)
-	}
-	return sb.String()
 }
 
 func errorResult(msg string) *mcp.CallToolResult {
