@@ -49,7 +49,7 @@ func ToolToSkill(serverName string, tool *mcp.Tool, session *mcp.ClientSession) 
 	return b.Handle(func(ctx context.Context, c *skill.Call) error {
 		// Gestion de --help
 		if c.Flags["help"] != "" {
-			return printHelp(c, skillName, capturedTool, capturedArgs, capturedFlags)
+			return printHelp(c, skillName, capturedTool, capturedArgs, capturedFlags, capturedSchema)
 		}
 
 		arguments := map[string]any{}
@@ -61,13 +61,37 @@ func ToolToSkill(serverName string, tool *mcp.Tool, session *mcp.ClientSession) 
 			}
 		}
 
+		// Ajouter les propriétés requises non-scalaires qui n'ont pas d'ArgDef
+		for _, name := range capturedSchema.Required {
+			prop, exists := capturedSchema.Properties[name]
+			if !exists {
+				continue
+			}
+			if !isNonScalarType(prop.Type) {
+				continue
+			}
+			if _, exists := arguments[name]; exists {
+				continue
+			}
+			arguments[name] = map[string]any{}
+		}
+
 		// Mapper les flags (ignorer "help" qui est notre flag interne)
 		for name, val := range c.Flags {
 			if name == "help" {
 				continue
 			}
 			if val != "" {
-				arguments[name] = val
+				prop, exists := capturedSchema.Properties[name]
+				if exists && isNonScalarType(prop.Type) {
+					var parsed any
+					if err := json.Unmarshal([]byte(val), &parsed); err != nil {
+						return fmt.Errorf("flag %s: invalid JSON: %w", name, err)
+					}
+					arguments[name] = parsed
+				} else {
+					arguments[name] = val
+				}
 			}
 		}
 
@@ -103,7 +127,8 @@ func ToolToSkill(serverName string, tool *mcp.Tool, session *mcp.ClientSession) 
 }
 
 // printHelp affiche l'aide d'un tool MCP sur stdout.
-func printHelp(c *skill.Call, skillName string, tool *mcp.Tool, args []skill.ArgDef, flags []skill.FlagDef) error {
+func printHelp(c *skill.Call, skillName string, tool *mcp.Tool, args []skill.ArgDef, flags []skill.FlagDef, schema inputSchema) error {
+
 	if tool.Description != "" {
 		fmt.Fprintf(c.Stdout, "%s\n\n", tool.Description)
 	}
@@ -128,7 +153,7 @@ func printHelp(c *skill.Call, skillName string, tool *mcp.Tool, args []skill.Arg
 		}
 	}
 
-	if len(flags) > 0 {
+	if len(flags) > 0 || hasRequiredNonScalar(schema, args) {
 		fmt.Fprint(c.Stdout, "\nFlags:\n")
 		for _, f := range flags {
 			nameWithShort := "--" + f.Name
@@ -139,10 +164,50 @@ func printHelp(c *skill.Call, skillName string, tool *mcp.Tool, args []skill.Arg
 			if f.Default != "" {
 				def = fmt.Sprintf(" (défaut: %s)", f.Default)
 			}
-			fmt.Fprintf(c.Stdout, "  %-24s %s%s\n", nameWithShort, f.Description, def)
+			prop, hasProp := schema.Properties[f.Name]
+
+			jsonHint := ""
+			if hasProp && isNonScalarType(prop.Type) {
+				jsonHint = " " + formatSchemaHint(prop)
+			}
+			fmt.Fprintf(c.Stdout, "  %-24s %s%s%s\n", nameWithShort, f.Description, jsonHint, def)
+		}
+		// Afficher les propriétés requises non-scalaires comme flags obligatoires
+		for _, name := range schema.Required {
+			prop, exists := schema.Properties[name]
+			if !exists || !isNonScalarType(prop.Type) {
+				continue
+			}
+			if argNameExists(name, args) {
+				continue
+			}
+			schemaHint := formatSchemaHint(prop)
+			fmt.Fprintf(c.Stdout, "  %-24s %s %s (requis)\n", "--"+name, prop.Description, schemaHint)
 		}
 	}
 	return nil
+}
+
+func hasRequiredNonScalar(schema inputSchema, args []skill.ArgDef) bool {
+	for _, name := range schema.Required {
+		prop, exists := schema.Properties[name]
+		if !exists {
+			continue
+		}
+		if isNonScalarType(prop.Type) && !argNameExists(name, args) {
+			return true
+		}
+	}
+	return false
+}
+
+func argNameExists(name string, args []skill.ArgDef) bool {
+	for _, a := range args {
+		if a.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // extractText concatène le texte de tous les TextContent dans la liste.
@@ -168,8 +233,11 @@ type inputSchema struct {
 }
 
 type propertySchema struct {
-	Description string `json:"description"`
-	Type        string `json:"type"`
+	Description string                    `json:"description"`
+	Type        string                    `json:"type"`
+	Properties  map[string]propertySchema `json:"properties"`
+	Items       *propertySchema           `json:"items"`
+	Required    []string                  `json:"required"`
 }
 
 // parseInputSchema convertit le champ InputSchema (any) en inputSchema structuré.
@@ -182,7 +250,9 @@ func parseInputSchema(raw any) inputSchema {
 		return inputSchema{}
 	}
 	var s inputSchema
-	_ = json.Unmarshal(data, &s)
+	if err := json.Unmarshal(data, &s); err != nil {
+		return inputSchema{}
+	}
 	return s
 }
 
@@ -193,9 +263,12 @@ func schemaToArgsDefs(s inputSchema) (args []skill.ArgDef, flags []skill.FlagDef
 		requiredSet[name] = true
 	}
 
-	// Les args positionnels sont dans l'ordre de required
+	// Les args positionnels sont les propriétés requises de type scalaire
 	for _, name := range s.Required {
 		prop := s.Properties[name]
+		if isNonScalarType(prop.Type) {
+			continue
+		}
 		args = append(args, skill.ArgDef{
 			Name:        name,
 			Description: prop.Description,
@@ -203,7 +276,7 @@ func schemaToArgsDefs(s inputSchema) (args []skill.ArgDef, flags []skill.FlagDef
 		})
 	}
 
-	// Les flags sont les propriétés optionnelles (pas dans required)
+	// Les flags sont les propriétés optionnelles + les propriétés requises non-scalaires
 	for name, prop := range s.Properties {
 		if requiredSet[name] {
 			continue
@@ -213,6 +286,23 @@ func schemaToArgsDefs(s inputSchema) (args []skill.ArgDef, flags []skill.FlagDef
 			Short:       "",
 			Default:     "",
 			Description: prop.Description,
+		})
+	}
+
+	// Ajouter les propriétés requises non-scalaires comme flags (pour l'aide)
+	for _, name := range s.Required {
+		prop, exists := s.Properties[name]
+		if !exists {
+			continue
+		}
+		if !isNonScalarType(prop.Type) {
+			continue
+		}
+		flags = append(flags, skill.FlagDef{
+			Name:        name,
+			Short:       "",
+			Default:     "",
+			Description: prop.Description + " " + formatSchemaHint(prop),
 		})
 	}
 
@@ -233,4 +323,100 @@ func stdinPropertyName(s inputSchema) string {
 		}
 	}
 	return ""
+}
+
+func isScalarType(t string) bool {
+	if t == "" {
+		return true
+	}
+	return t == "string" || t == "number" || t == "integer" || t == "boolean"
+}
+
+func isNonScalarType(t string) bool {
+	return t == "object" || t == "array"
+}
+
+func formatSchemaHint(prop propertySchema) string {
+	return formatProp(prop, false)
+}
+
+func formatProp(prop propertySchema, nested bool) string {
+	var sb strings.Builder
+
+	if prop.Type == "object" && len(prop.Properties) > 0 {
+		grouped := groupDottedProperties(prop.Properties)
+
+		sb.WriteString("{")
+		keys := make([]string, 0, len(grouped))
+		for k := range grouped {
+			keys = append(keys, k)
+		}
+		for i, k := range keys {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(k)
+			sb.WriteString(": ")
+			sb.WriteString(formatProp(grouped[k], true))
+		}
+		sb.WriteString("}")
+		return sb.String()
+	}
+
+	if prop.Type == "array" && prop.Items != nil {
+		sb.WriteString("[")
+		if prop.Items.Type == "object" && len(prop.Items.Properties) > 0 {
+			grouped := groupDottedProperties(prop.Items.Properties)
+			sb.WriteString("{")
+			keys := make([]string, 0, len(grouped))
+			for k := range grouped {
+				keys = append(keys, k)
+			}
+			for i, k := range keys {
+				if i > 0 {
+					sb.WriteString(", ")
+				}
+				sb.WriteString(k)
+				sb.WriteString(": ")
+				sb.WriteString(formatProp(grouped[k], true))
+			}
+			sb.WriteString("}")
+		} else {
+			sb.WriteString(prop.Items.Type)
+		}
+		sb.WriteString("]")
+		return sb.String()
+	}
+
+	return prop.Type
+}
+
+func groupDottedProperties(props map[string]propertySchema) map[string]propertySchema {
+	result := make(map[string]propertySchema)
+
+	for name, prop := range props {
+		parts := strings.SplitN(name, ".", 2)
+		if len(parts) == 2 {
+			parent, child := parts[0], parts[1]
+			if existing, ok := result[parent]; ok {
+				if existing.Properties == nil {
+					existing.Properties = make(map[string]propertySchema)
+				}
+				existing.Properties[child] = prop
+				existing.Type = "object"
+				result[parent] = existing
+			} else {
+				result[parent] = propertySchema{
+					Type: "object",
+					Properties: map[string]propertySchema{
+						child: prop,
+					},
+				}
+			}
+		} else {
+			result[name] = prop
+		}
+	}
+
+	return result
 }
