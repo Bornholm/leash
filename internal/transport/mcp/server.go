@@ -31,42 +31,51 @@ func New(eng engine.Engine) *MCPServer {
 }
 
 // buildInstructions generates server instructions for the LLM agent based on the
-// registered skills and available tools.
+// registered commands and available binaries.
 func buildInstructions(eng engine.Engine) string {
 	var sb strings.Builder
 
-	sb.WriteString(`LeaSH is a policy-enforced sandbox that lets you run shell commands safely.
-Scripts that violate the active policy are blocked and return exit code 127.
+	sb.WriteString(`LeaSH is a policy-enforced shell sandbox. All commands run inside the sandbox and must comply with the active policy.
 
-## Tools
+## Available tools
 
 ### execute_shell
-Run an arbitrary shell script. Use this for all operations — commands, pipelines, scripts, or skills.
-The response contains sections ## STDOUT, ## STDERR, ## EXIT CODE, and ## BLOCKED (if commands were blocked).
+Execute a shell script inside the sandbox. Use this for EVERYTHING:
+- System binaries (ls, grep, curl, etc.)
+- Shell builtins (echo, cd, export, etc.)
+- Pipes, loops, conditionals, and any shell syntax
+- Domain specific tools configured in the shell environment
+
+Returns: STDOUT, STDERR, EXIT CODE, and BLOCKED section if any command was denied.
 
 ### list_commands
-Returns full documentation for every registered skill. Call this when you are unsure of a skill's exact arguments or flags.
+List all available commands. Call this first to discover what commands are registered and how to use them.
 
 `)
 
+	// Available commands = registered commands + allowed binaries
+	commands := eng.Registry().ListNames()
 	binaries := eng.Policy().AllowedBinaries()
-	if len(binaries) == 0 {
-		sb.WriteString("## Allowed system binaries\nNo system binaries are allowed by the active policy.\n")
+
+	if len(binaries) == 0 && len(commands) == 0 {
+		sb.WriteString("## Available commands\nNo commands are available.\n")
 	} else {
-		sb.WriteString("## Allowed system binaries\n")
-		for _, b := range binaries {
-			sb.WriteString("- `" + b + "`\n")
+		sb.WriteString("## Available commands\n")
+		for _, c := range commands {
+			sb.WriteString("- " + c + "\n")
 		}
-		sb.WriteString("\nAny other binary will be blocked (exit code 127).\n")
+		for _, b := range binaries {
+			sb.WriteString("- " + b + "\n")
+		}
+		sb.WriteString("\nAny other command will be blocked (exit code 127).\n")
 	}
 
 	sb.WriteString(`
 ## Decision guide
 
-1. Want to run a skill? → use execute_shell with the skill name and its arguments.
-2. Need to chain multiple commands or use shell features (pipes, loops)? → use execute_shell.
-3. Unsure what skills are available or how to call one? → call list_commands first.
-4. A command returns exit code 127? → it was blocked by policy; do not retry it as-is.
+1. Need to run a command or script? → use execute_shell
+2. Want to discover available commands? → call list_commands first
+3. Command returns exit code 127? → blocked by policy, do not retry
 `)
 
 	return sb.String()
@@ -155,7 +164,7 @@ func (ms *MCPServer) handleExecuteShell(_ context.Context, req *mcp.CallToolRequ
 		if len(blocked) > 0 {
 			sb.WriteString("## BLOCKED\n")
 			sb.WriteString(strings.Join(blocked, "\n"))
-			sb.WriteString("\n")
+			sb.WriteString("\n\n→ Use list_commands to see available commands\n")
 		}
 	}
 
@@ -167,19 +176,29 @@ func (ms *MCPServer) handleExecuteShell(_ context.Context, req *mcp.CallToolRequ
 
 func (ms *MCPServer) handleListCommands(_ context.Context, _ *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	var sb strings.Builder
-	sb.WriteString(ms.eng.Registry().GenerateManifest())
 
+	commands := ms.eng.Registry().ListNames()
 	binaries := ms.eng.Policy().AllowedBinaries()
-	if len(binaries) > 0 {
-		sb.WriteString("# Allowed System Binaries\n\n")
-		sb.WriteString("The following system binaries can be called directly in shell scripts:\n\n")
-		for _, b := range binaries {
-			sb.WriteString("- `" + b + "`\n")
-		}
-		sb.WriteString("\nAny other binary will be blocked (exit code 127).\n")
-	} else {
-		sb.WriteString("# Allowed System Binaries\n\nNo system binaries are allowed by the active policy.\n")
+
+	if len(commands) > 0 {
+		sb.WriteString("# Available Commands\n\n")
+		sb.WriteString(ms.eng.Registry().GenerateManifest())
 	}
+
+	if len(binaries) > 0 {
+		sb.WriteString("# System Binaries\n\n")
+		sb.WriteString("The following system binaries can be called directly:\n\n")
+		for _, b := range binaries {
+			sb.WriteString("- " + b + "\n")
+		}
+		sb.WriteString("\n")
+	}
+
+	if len(commands) == 0 && len(binaries) == 0 {
+		sb.WriteString("No commands are available.\n")
+	}
+
+	sb.WriteString("Any other command will be blocked (exit code 127).\n")
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{&mcp.TextContent{Text: sb.String()}},
