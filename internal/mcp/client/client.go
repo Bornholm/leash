@@ -1,8 +1,10 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -22,6 +24,7 @@ type ConnectedServer struct {
 // Connect ouvre une session vers un serveur MCP configuré et récupère la liste de ses tools.
 func Connect(ctx context.Context, cfg security.MCPServerConfig) (*ConnectedServer, error) {
 	var transport mcp.Transport
+	var stderrBuf *bytes.Buffer
 	switch cfg.Transport {
 	case "stdio":
 		if len(cfg.Command) == 0 {
@@ -34,6 +37,14 @@ func Connect(ctx context.Context, cfg security.MCPServerConfig) (*ConnectedServe
 				cmd.Env = append(cmd.Env, k+"="+v)
 			}
 		}
+		stderrPipe, err := cmd.StderrPipe()
+		if err != nil {
+			return nil, fmt.Errorf("serveur MCP %q : impossible de créer le pipe stderr : %w", cfg.Name, err)
+		}
+		stderrBuf = &bytes.Buffer{}
+		go func() {
+			_, _ = io.Copy(stderrBuf, stderrPipe)
+		}()
 		transport = &mcp.CommandTransport{Command: cmd}
 	case "http", "":
 		if cfg.URL == "" {
@@ -58,6 +69,10 @@ func Connect(ctx context.Context, cfg security.MCPServerConfig) (*ConnectedServe
 	client := mcp.NewClient(&mcp.Implementation{Name: "leash", Version: "1.0.0"}, nil)
 	session, err := client.Connect(ctx, transport, nil)
 	if err != nil {
+		stderrStr := stderrBuf.String()
+		if stderrStr != "" {
+			return nil, fmt.Errorf("connexion au serveur MCP %q : %w ; stderr: %s", cfg.Name, err, stderrStr)
+		}
 		return nil, fmt.Errorf("connexion au serveur MCP %q : %w", cfg.Name, err)
 	}
 
