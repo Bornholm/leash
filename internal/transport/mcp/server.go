@@ -159,7 +159,7 @@ func (ms *MCPServer) handleExecuteShell(_ context.Context, req *mcp.CallToolRequ
 		if len(blocked) > 0 {
 			sb.WriteString("## BLOCKED\n")
 			sb.WriteString(strings.Join(blocked, "\n"))
-			sb.WriteString("\n\n→ Run execute_shell { \"script\": \"help\" } to list available shell commands.\n")
+			sb.WriteString("\n\n→ Run execute_shell { \"script\": \"leash-help\" } to list available shell commands.\n")
 		}
 	}
 
