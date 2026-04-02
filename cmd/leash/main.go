@@ -13,6 +13,7 @@ import (
 	"github.com/bornholm/leash/internal/security"
 	mcptransport "github.com/bornholm/leash/internal/transport/mcp"
 	repltransport "github.com/bornholm/leash/internal/transport/repl"
+	"github.com/bornholm/leash/pkg/skill"
 	skillshell "github.com/bornholm/leash/pkg/skill/shell"
 	skilltengo "github.com/bornholm/leash/pkg/skill/tengo"
 	"github.com/spf13/cobra"
@@ -217,7 +218,22 @@ func buildEngine(ctx context.Context, polFile, auditLog string) (engine.Engine, 
 		auditCloser()
 	}
 
-	return engine.New(pol, reg, auditor, rl), cleanup, nil
+	eng := engine.New(pol, reg, auditor, rl)
+
+	helpSkill := skill.New("leash-help").
+		Description("List all available shell commands with their usage and flags.").
+		Example("List all commands", "leash-help").
+		Handle(func(ctx context.Context, c *skill.Call) error {
+			fmt.Fprint(c.Stdout, reg.GenerateManifest())
+			return nil
+		})
+
+	if err := reg.Register(helpSkill); err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("enregistrement du skill help : %w", err)
+	}
+
+	return eng, cleanup, nil
 }
 
 // openAuditWriter ouvre la destination de l'audit log.

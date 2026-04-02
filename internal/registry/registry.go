@@ -71,14 +71,14 @@ func (r *Registry) GenerateManifest() string {
 	defer r.mu.RUnlock()
 
 	if len(r.skills) == 0 {
-		return "No skills available.\n"
+		return "No shell commands are available.\n"
 	}
 
 	var sb strings.Builder
-	sb.WriteString("# Available Skills\n\n")
+	sb.WriteString("# Available Shell Commands\n\nThese are shell commands invoked via execute_shell, e.g.: execute_shell {\"script\": \"<command> [args]\"}\n\n")
 
 	for _, sk := range r.skills {
-		sb.WriteString("## `" + sk.Name + "`\n\n")
+		sb.WriteString("## " + sk.Name + "\n\n")
 		if sk.Description != "" {
 			sb.WriteString(sk.Description + "\n\n")
 		}
