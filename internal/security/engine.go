@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"mvdan.cc/sh/v3/syntax"
+
+	"github.com/bornholm/leash/internal/security/sandbox"
 )
 
 // policyEngine est l'implémentation concrète de PolicyEngine.
@@ -154,4 +156,8 @@ func (p *policyEngine) EnabledSkills() []string {
 
 func (p *policyEngine) AllowedBinaries() []string {
 	return p.cfg.AllowedBinaries
+}
+
+func (p *policyEngine) SandboxConfig() sandbox.Config {
+	return p.cfg.Sandbox
 }

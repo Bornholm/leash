@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/bornholm/leash/internal/security/sandbox"
 	"github.com/bornholm/leash/pkg/skill"
 )
 
@@ -48,7 +49,12 @@ func MakeHandler(skillName string, interpreter string, src []byte) skill.Handler
 		cmd.Stdout = c.Stdout
 		cmd.Stderr = c.Stderr
 
-		if err := cmd.Run(); err != nil {
+		sb := sandbox.SandboxFromContext(ctx)
+		wrapped, wrapErr := sb.Wrap(ctx, cmd)
+		if wrapErr != nil {
+			return fmt.Errorf("sandbox wrap: %w", wrapErr)
+		}
+		if err := wrapped.Run(); err != nil {
 			var exitErr *exec.ExitError
 			if errors.As(err, &exitErr) {
 				return skill.ExitError{Code: exitErr.ExitCode()}

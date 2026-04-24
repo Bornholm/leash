@@ -41,7 +41,51 @@ Every script execution is wrapped in a `context.WithTimeout`. Scripts that excee
 
 ### 7. Audit trail
 
-Every command execution — including blocked ones — is recorded in the audit trail with the command name, exit code, duration, and block reason. Logs are emitted as structured JSON via `log/slog` to the configured writer.
+Every command execution — including blocked ones — is recorded in the audit trail with the command name, exit code, duration, block reason, and sandbox backend used. Logs are emitted as structured JSON via `log/slog` to the configured writer.
+
+### 8. Filesystem isolation (sandbox)
+
+LeaSH can wrap every external command in a filesystem sandbox using the `sandbox` block in the policy. Two backends are supported:
+
+| Backend | Description | Requirements |
+|---------|-------------|--------------|
+| `none` (default) | No isolation — the process inherits the full filesystem | — |
+| `bwrap` | Uses [bubblewrap](https://github.com/containers/bubblewrap) namespaces (bind mounts, network isolation, PID isolation) | `bwrap` in `$PATH` |
+| `chroot` | `chroot(2)` syscall — restricted to a custom rootfs | Root privileges (Linux only) |
+
+**Bubblewrap** is strongly preferred: it does not require root, isolates the network and PID namespace, and only exposes the paths you explicitly bind-mount.
+
+**Chroot** is provided as a fallback but does not drop capabilities — it is not a true security boundary without additional hardening.
+
+```yaml
+sandbox:
+  enabled: true
+  backend: bwrap
+  readonly_binds:
+    - /usr
+  readwrite_binds:
+    - source: /tmp/leash-sandbox
+      target: /work
+  # On merged-usr systems (Arch, Debian 12+, Ubuntu 22+), recreate symlinks:
+  symlinks:
+    - source: usr/bin
+      target: /bin
+    - source: usr/lib
+      target: /lib
+    - source: usr/lib
+      target: /lib64
+  tmpfs:
+    - /tmp
+  workdir: /work
+  unshare:
+    network: true
+    pid: true
+    ipc: true
+    uts: true
+  die_with_parent: true
+```
+
+The sandbox backend name appears in each audit record as `"sandbox": "bwrap"` (or `"none"`).
 
 ## Skill confirmation
 
@@ -56,6 +100,6 @@ skills:
 
 ## What LeaSH does NOT provide
 
-- **Filesystem isolation** — scripts can read/write any path accessible to the process. Use a chroot, container, or seccomp policy at the OS level if filesystem isolation is required.
-- **Network isolation** — allowed binaries can make network calls. Restrict at the network level if needed.
+- **Full container isolation** — bubblewrap provides namespace-level isolation but is not equivalent to a container runtime. Use Docker/Podman for stronger guarantees.
+- **Network isolation without bwrap** — with the `none` sandbox, allowed binaries can make network calls. Use `unshare.network: true` with bwrap to prevent this.
 - **Process isolation** — the shell runner shares the same process as LeaSH. Use containers for full isolation.

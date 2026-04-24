@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/bornholm/leash/internal/security"
+	"github.com/bornholm/leash/internal/security/sandbox"
 	"github.com/bornholm/leash/pkg/skill"
 	skillshell "github.com/bornholm/leash/pkg/skill/shell"
 	skilltengo "github.com/bornholm/leash/pkg/skill/tengo"
@@ -206,6 +207,15 @@ func WithMCPServer(cfg security.MCPServerConfig) Option {
 func WithAuditWriter(w io.Writer) Option {
 	return func(c *config) error {
 		c.auditWriter = w
+		return nil
+	}
+}
+
+// WithSandbox active l'isolation filesystem avec la configuration fournie.
+// Si backend est "none" ou vide, aucun changement comportemental.
+func WithSandbox(cfg sandbox.Config) Option {
+	return func(c *config) error {
+		c.sandboxConfig = cfg
 		return nil
 	}
 }

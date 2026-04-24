@@ -1,0 +1,56 @@
+# Example policy with bubblewrap filesystem isolation.
+# Requires: apt install bubblewrap  (Debian/Ubuntu)
+#           dnf install bubblewrap  (Fedora/RHEL)
+#           pacman -S bubblewrap    (Arch/Manjaro)
+#
+# Usage:
+#   mkdir -p /tmp/leash-sandbox
+#   ./leash --policy policies/sandboxed.yaml exec <<< 'ls /work'
+
+execution:
+  max_duration: 10s
+  max_output_bytes: 1048576
+
+allowed_binaries:
+  - ls
+  - cat
+  - grep
+  - wc
+  - head
+  - tail
+  - sort
+
+blocked_patterns:
+  - "rm -rf"
+
+environment:
+  static:
+    HOME: /work
+    PATH: /usr/bin:/bin
+
+sandbox:
+  enabled: true
+  backend: bwrap
+  readonly_binds:
+    - /usr
+  readwrite_binds:
+    - source: /tmp/leash-sandbox
+      target: /work
+  tmpfs:
+    - /tmp
+  # Sur les systèmes merged-usr (Arch, Debian 12+, Ubuntu 22+),
+  # /bin, /lib et /lib64 sont des symlinks vers /usr — les recréer dans le namespace.
+  symlinks:
+    - source: usr/bin
+      target: /bin
+    - source: usr/lib
+      target: /lib
+    - source: usr/lib
+      target: /lib64
+  workdir: /work
+  unshare:
+    network: true
+    pid: true
+    ipc: true
+    uts: true
+  die_with_parent: true

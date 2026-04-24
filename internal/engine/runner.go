@@ -16,6 +16,7 @@ import (
 
 	"github.com/bornholm/leash/internal/registry"
 	"github.com/bornholm/leash/internal/security"
+	"github.com/bornholm/leash/internal/security/sandbox"
 )
 
 // Runner est l'implémentation concrète de Engine.
@@ -24,20 +25,27 @@ type Runner struct {
 	reg     *registry.Registry
 	auditor *security.AuditLogger
 	rl      *security.RateLimiter
+	sandbox sandbox.Sandbox
 }
 
 // New crée un Runner avec tous ses composants.
+// Si sb est nil, le backend none (no-op) est utilisé.
 func New(
 	pol security.PolicyEngine,
 	reg *registry.Registry,
 	auditor *security.AuditLogger,
 	rl *security.RateLimiter,
+	sb sandbox.Sandbox,
 ) *Runner {
+	if sb == nil {
+		sb = sandbox.NewNone()
+	}
 	return &Runner{
 		policy:  pol,
 		reg:     reg,
 		auditor: auditor,
 		rl:      rl,
+		sandbox: sb,
 	}
 }
 
@@ -94,9 +102,10 @@ func (r *Runner) ExecWithStreams(ctx context.Context, script string, stdin io.Re
 		return nil, fmt.Errorf("policy violation: %w", err)
 	}
 
-	// 4. Contexte avec timeout
+	// 4. Contexte avec timeout + injection sandbox
 	ctx, cancel := context.WithTimeout(ctx, r.policy.MaxExecDuration())
 	defer cancel()
+	ctx = sandbox.ContextWithSandbox(ctx, r.sandbox)
 
 	// 5. Streams bornés
 	limitedOut := newLimitedWriter(stdout, r.policy.MaxOutputBytes())
@@ -117,6 +126,8 @@ func (r *Runner) ExecWithStreams(ctx context.Context, script string, stdin io.Re
 		interp.StdIO(stdin, limitedOut, limitedErr),
 		interp.Env(expand.ListEnviron(envList...)),
 		interp.ExecHandlers(NewExecHandler(r.reg, r.policy, r.rl, recorder)),
+		interp.OpenHandler(NewFSOpenHandler(r.sandbox.Config())),
+		interp.ReadDirHandler2(NewFSReadDirHandler(r.sandbox.Config())),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("creating runner: %w", err)

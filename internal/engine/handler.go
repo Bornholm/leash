@@ -5,12 +5,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 
+	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
 
 	"github.com/bornholm/leash/internal/registry"
 	"github.com/bornholm/leash/internal/security"
+	"github.com/bornholm/leash/internal/security/sandbox"
 	"github.com/bornholm/leash/pkg/skill"
 )
 
@@ -51,7 +56,7 @@ func NewExecHandler(
 					return interp.ExitStatus(126)
 				}
 
-				key := recorder.Start(name, args[1:], true)
+				key := recorder.Start(name, args[1:], true, sandbox.SandboxFromContext(ctx).Name())
 				call := buildCall(args[1:], sk.Flags, hc, pol.SafeEnvironment())
 
 				if err := skill.Validate(sk, call); err != nil {
@@ -81,8 +86,8 @@ func NewExecHandler(
 
 			// 2. Binaire allowlisté ?
 			if pol.IsAllowedBinary(name) {
-				key := recorder.Start(name, args[1:], false)
-				err := next(ctx, args)
+				key := recorder.Start(name, args[1:], false, sandbox.SandboxFromContext(ctx).Name())
+				err := execAllowedBinary(ctx, args, hc)
 				exitCode := 0
 				var exitStatus interp.ExitStatus
 				if errors.As(err, &exitStatus) {
@@ -190,4 +195,62 @@ func buildCall(args []string, flagDefs []skill.FlagDef, hc interp.HandlerContext
 		Env:     func(key string) string { return hc.Env.Get(key).String() },
 		SafeEnv: safeEnv,
 	}
+}
+
+// execAllowedBinary exécute un binaire allowlisté en passant par sandbox.Wrap.
+// Remplace le délégation à next(ctx, args) pour permettre l'isolation filesystem.
+func execAllowedBinary(ctx context.Context, args []string, hc interp.HandlerContext) error {
+	sb := sandbox.SandboxFromContext(ctx)
+
+	pathEnv := hc.Env.Get("PATH").String()
+	binaryPath, err := lookupInPath(args[0], pathEnv)
+	if err != nil {
+		return interp.ExitStatus(127)
+	}
+
+	var envList []string
+	hc.Env.Each(func(name string, vr expand.Variable) bool {
+		envList = append(envList, name+"="+vr.String())
+		return true
+	})
+
+	cmd := exec.CommandContext(ctx, binaryPath, args[1:]...)
+	cmd.Env = envList
+	cmd.Stdin = hc.Stdin
+	cmd.Stdout = hc.Stdout
+	cmd.Stderr = hc.Stderr
+	cmd.Dir = hc.Dir
+
+	wrapped, err := sb.Wrap(ctx, cmd)
+	if err != nil {
+		return fmt.Errorf("sandbox wrap: %w", err)
+	}
+	if err := wrapped.Run(); err != nil {
+		// Convertir *exec.ExitError en interp.ExitStatus pour que mvdan
+		// propage le vrai code de retour (et non un exit 1 générique).
+		var execErr *exec.ExitError
+		if errors.As(err, &execErr) {
+			return interp.ExitStatus(uint8(execErr.ExitCode()))
+		}
+		return interp.ExitStatus(1)
+	}
+	return nil
+}
+
+// lookupInPath recherche name dans les répertoires de pathEnv (séparateur ':').
+func lookupInPath(name, pathEnv string) (string, error) {
+	if filepath.IsAbs(name) {
+		return name, nil
+	}
+	for _, dir := range filepath.SplitList(pathEnv) {
+		if dir == "" {
+			dir = "."
+		}
+		full := filepath.Join(dir, name)
+		info, err := os.Stat(full)
+		if err == nil && !info.IsDir() && info.Mode()&0o111 != 0 {
+			return full, nil
+		}
+	}
+	return "", fmt.Errorf("%s: not found in PATH", name)
 }

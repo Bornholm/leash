@@ -101,6 +101,70 @@ See [Skills — Shell](skills-shell.md) for how to write shell skill files.
 
 Skills from all directories are merged into the same registry. Registration fails if two skills share the same name.
 
+## Sandbox YAML reference
+
+The `sandbox` block can appear in any policy file. All fields are optional except `enabled` and `backend`.
+
+```yaml
+sandbox:
+  enabled: true          # false = backend none (default)
+  backend: bwrap         # none | bwrap | chroot
+
+  # bwrap — read-only bind mounts (host path → same path in namespace)
+  readonly_binds:
+    - /usr
+    - /etc/ssl           # certificates for TLS
+
+  # bwrap — read-write bind mounts (source → target inside namespace)
+  readwrite_binds:
+    - source: /tmp/leash-work
+      target: /work
+
+  # bwrap — tmpfs mounts (in-memory, empty at start)
+  tmpfs:
+    - /tmp
+
+  # bwrap — symlinks to create inside the namespace
+  # Required on merged-usr systems where /bin → usr/bin etc.
+  symlinks:
+    - source: usr/bin    # symlink value (relative to sandbox root)
+      target: /bin       # path inside the namespace
+
+  # bwrap — working directory inside the namespace
+  workdir: /work
+
+  # bwrap — Linux namespace isolation
+  unshare:
+    network: true        # isolate network (no outbound connections)
+    pid: true            # isolate PID namespace
+    ipc: true            # isolate IPC namespace
+    uts: true            # isolate hostname/domainname
+    user: false          # isolate user namespace (requires user namespaces)
+
+  # bwrap — kill sandboxed process if leash exits
+  die_with_parent: true
+
+  # chroot — path to the rootfs (required for chroot backend)
+  rootfs: /var/lib/leash/rootfs
+
+  # chroot — run as this UID/GID inside the rootfs
+  uid: 1000
+  gid: 1000
+```
+
+### Install bubblewrap
+
+```bash
+# Debian / Ubuntu
+apt install bubblewrap
+
+# Fedora / RHEL
+dnf install bubblewrap
+
+# Arch / Manjaro
+pacman -S bubblewrap
+```
+
 ## Examples
 
 ```bash

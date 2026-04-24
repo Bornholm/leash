@@ -46,9 +46,38 @@ Add to your MCP client configuration (e.g. `claude_desktop_config.json`):
 }
 ```
 
+## Features
+
+- **Binary allowlist** — only explicitly listed system commands can run
+- **AST validation** — command count, subshell depth, and background job limits enforced before execution
+- **Pattern blocking** — substring matches reject dangerous commands before parsing
+- **Environment isolation** — host environment never inherited; only declared variables are visible
+- **Rate limiting** — global and per-skill call rate limits
+- **Timeout** — configurable maximum execution duration per script
+- **Audit trail** — every command (blocked or executed) logged as structured JSON
+- **Filesystem sandbox** — bubblewrap (bwrap) or chroot isolation; only bind-mounted paths are accessible
+- **MCP transport** — expose as an MCP tool server for Claude Desktop and other agents
+- **Extensible skills** — register Go functions, Tengo scripts, or shell scripts as shell commands
+
+### Filesystem sandbox example
+
+```bash
+# Install bubblewrap
+apt install bubblewrap   # or: pacman -S bubblewrap
+
+# Create the sandbox work directory
+mkdir -p /tmp/leash-sandbox
+
+# Run a command: ls /work is isolated to /tmp/leash-sandbox
+echo 'ls /work' | ./leash --policy policies/sandboxed.yaml exec
+
+# /etc is not bind-mounted → cat /etc/shadow fails
+echo 'cat /etc/shadow' | ./leash --policy policies/sandboxed.yaml exec
+```
+
 ## Documentation
 
-- [CLI reference](docs/cli.md) — all commands and flags
+- [CLI reference](docs/cli.md) — all commands and flags (includes sandbox YAML reference)
 - [Policy files](docs/policies.md) — control what the engine is allowed to do
 - [Skills — Go](docs/skills.md) — register custom Go functions as shell commands
 - [Skills — Tengo](docs/skills-tengo.md) — write skills as Tengo scripts (no compilation)

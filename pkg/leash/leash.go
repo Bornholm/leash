@@ -25,6 +25,7 @@ import (
 	mcpregistry "github.com/bornholm/leash/internal/mcp/registry"
 	"github.com/bornholm/leash/internal/registry"
 	"github.com/bornholm/leash/internal/security"
+	"github.com/bornholm/leash/internal/security/sandbox"
 )
 
 // Engine est l'interface publique du moteur d'exécution shell.
@@ -71,6 +72,11 @@ func New(ctx context.Context, opts ...Option) (Engine, func(), error) {
 	pol := security.NewPolicyEngine(polCfg)
 	rl := security.NewRateLimiter(polCfg)
 
+	sb, err := sandbox.New(cfg.sandboxConfig)
+	if err != nil {
+		return nil, nil, fmt.Errorf("leash: building sandbox: %w", err)
+	}
+
 	var auditor *security.AuditLogger
 	if cfg.auditWriter != nil {
 		handler := slog.NewJSONHandler(cfg.auditWriter, nil)
@@ -85,6 +91,7 @@ func New(ctx context.Context, opts ...Option) (Engine, func(), error) {
 	}
 
 	var cleanupFns []func()
+	cleanupFns = append(cleanupFns, func() { _ = sb.Close() })
 
 	if len(cfg.mcpServers) > 0 {
 		servers, err := mcpregistry.LoadFromConfig(ctx, cfg.mcpServers, reg)
@@ -98,7 +105,7 @@ func New(ctx context.Context, opts ...Option) (Engine, func(), error) {
 		})
 	}
 
-	eng := engine.New(pol, reg, auditor, rl)
+	eng := engine.New(pol, reg, auditor, rl, sb)
 
 	cleanup := func() {
 		for _, fn := range cleanupFns {

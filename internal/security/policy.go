@@ -3,6 +3,8 @@ package security
 import (
 	"context"
 	"time"
+
+	"github.com/bornholm/leash/internal/security/sandbox"
 )
 
 // PolicyEngine définit les règles de sécurité appliquées par le moteur d'exécution.
@@ -39,4 +41,7 @@ type PolicyEngine interface {
 
 	// AllowedBinaries retourne la liste des binaires système autorisés par la politique.
 	AllowedBinaries() []string
+
+	// SandboxConfig retourne la configuration sandbox de la politique.
+	SandboxConfig() sandbox.Config
 }

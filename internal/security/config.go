@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/bornholm/leash/internal/security/sandbox"
 )
 
 // Duration est un type custom pour parser les durées YAML ("30s", "1m", etc.).
@@ -84,6 +86,7 @@ type PolicyConfig struct {
 		RequireConfirmation []string `yaml:"require_confirmation"`
 	} `yaml:"skills"`
 	MCPServers []MCPServerConfig `yaml:"mcp_servers"`
+	Sandbox    sandbox.Config    `yaml:"sandbox"`
 }
 
 // LoadPolicyConfig charge un fichier YAML de politique.

@@ -20,4 +20,6 @@ type CommandRecord struct {
 	Reason string
 	// IsSkill est vrai si la commande était un skill enregistré.
 	IsSkill bool
+	// SandboxBackend identifie le backend sandbox utilisé lors de l'exécution ("none", "bwrap", etc.).
+	SandboxBackend string
 }

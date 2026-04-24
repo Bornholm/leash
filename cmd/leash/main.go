@@ -11,6 +11,7 @@ import (
 	mcpregistry "github.com/bornholm/leash/internal/mcp/registry"
 	"github.com/bornholm/leash/internal/registry"
 	"github.com/bornholm/leash/internal/security"
+	"github.com/bornholm/leash/internal/security/sandbox"
 	mcptransport "github.com/bornholm/leash/internal/transport/mcp"
 	repltransport "github.com/bornholm/leash/internal/transport/repl"
 	"github.com/bornholm/leash/pkg/skill"
@@ -205,8 +206,15 @@ func buildEngine(ctx context.Context, polFile, auditLog string) (engine.Engine, 
 		}
 	}
 
+	sb, err := sandbox.New(polCfg.Sandbox)
+	if err != nil {
+		auditCloser()
+		return nil, nil, fmt.Errorf("construction du sandbox : %w", err)
+	}
+
 	servers, err := mcpregistry.LoadFromConfig(ctx, polCfg.MCPServers, reg)
 	if err != nil {
+		_ = sb.Close()
 		auditCloser()
 		return nil, nil, fmt.Errorf("chargement des serveurs MCP : %w", err)
 	}
@@ -215,10 +223,11 @@ func buildEngine(ctx context.Context, polFile, auditLog string) (engine.Engine, 
 		for _, s := range servers {
 			_ = s.Session.Close()
 		}
+		_ = sb.Close()
 		auditCloser()
 	}
 
-	eng := engine.New(pol, reg, auditor, rl)
+	eng := engine.New(pol, reg, auditor, rl, sb)
 
 	helpSkill := skill.New("leash-help").
 		Description("List all available shell commands with their usage and flags.").

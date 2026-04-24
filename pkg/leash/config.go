@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/bornholm/leash/internal/security"
+	"github.com/bornholm/leash/internal/security/sandbox"
 	"github.com/bornholm/leash/pkg/skill"
 )
 
@@ -31,9 +32,10 @@ type config struct {
 	enabledSkills       []string
 	requireConfirmation []string
 
-	mcpServers []security.MCPServerConfig
-	skills     []*skill.Skill
-	auditWriter io.Writer
+	mcpServers    []security.MCPServerConfig
+	skills        []*skill.Skill
+	auditWriter   io.Writer
+	sandboxConfig sandbox.Config
 }
 
 func (c *config) toPolicyConfig() *security.PolicyConfig {
@@ -64,6 +66,7 @@ func (c *config) toPolicyConfig() *security.PolicyConfig {
 	cfg.Skills.Enabled = c.enabledSkills
 	cfg.Skills.RequireConfirmation = c.requireConfirmation
 	cfg.MCPServers = c.mcpServers
+	cfg.Sandbox = c.sandboxConfig
 	return cfg
 }
 
@@ -86,4 +89,5 @@ func (c *config) applyPolicyConfig(p *security.PolicyConfig) {
 	c.enabledSkills = p.Skills.Enabled
 	c.requireConfirmation = p.Skills.RequireConfirmation
 	c.mcpServers = p.MCPServers
+	c.sandboxConfig = p.Sandbox
 }
