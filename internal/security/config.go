@@ -3,6 +3,7 @@ package security
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -90,14 +91,42 @@ type PolicyConfig struct {
 }
 
 // LoadPolicyConfig charge un fichier YAML de politique.
+// Les valeurs peuvent contenir des références à des variables d'environnement
+// avec la syntaxe shell : $VAR, ${VAR}, ${VAR:-default}, ${VAR-default}.
 func LoadPolicyConfig(path string) (*PolicyConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading policy file: %w", err)
 	}
+	expanded := expandEnvVars(string(data))
 	var cfg PolicyConfig
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	if err := yaml.Unmarshal([]byte(expanded), &cfg); err != nil {
 		return nil, fmt.Errorf("parsing policy file: %w", err)
 	}
 	return &cfg, nil
+}
+
+// expandEnvVars remplace les références à des variables d'environnement dans s.
+// Syntaxes supportées :
+//   - $VAR et ${VAR}           : substitution directe
+//   - ${VAR:-default}          : valeur par défaut si VAR est absente ou vide
+//   - ${VAR-default}           : valeur par défaut si VAR est absente uniquement
+func expandEnvVars(s string) string {
+	return os.Expand(s, func(key string) string {
+		// ${VAR:-default} — défaut si absent ou vide
+		if varName, defaultVal, ok := strings.Cut(key, ":-"); ok {
+			if val, found := os.LookupEnv(varName); found && val != "" {
+				return val
+			}
+			return defaultVal
+		}
+		// ${VAR-default} — défaut si absent seulement
+		if varName, defaultVal, ok := strings.Cut(key, "-"); ok {
+			if val, found := os.LookupEnv(varName); found {
+				return val
+			}
+			return defaultVal
+		}
+		return os.Getenv(key)
+	})
 }

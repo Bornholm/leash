@@ -58,6 +58,31 @@ skills:
 #       SOME_VAR: value           # (not injected into shell commands)
 ```
 
+## Environment variable interpolation
+
+Any value in a policy file can reference environment variables using shell-style syntax. Expansion happens before YAML parsing, so it works in any field.
+
+| Syntax              | Behavior                                           |
+| ------------------- | -------------------------------------------------- |
+| `$VAR`              | Replaced by the value of `VAR`, empty if unset     |
+| `${VAR}`            | Same as above                                      |
+| `${VAR:-default}`   | Uses `default` if `VAR` is unset **or empty**      |
+| `${VAR-default}`    | Uses `default` only if `VAR` is **unset**          |
+
+Example — parameterising paths via the environment:
+
+```yaml
+environment:
+  static:
+    HOME: ${LEASH_HOME:-/tmp/leash}
+    DATA_DIR: ${MY_DATA_DIR}
+
+mcp_servers:
+  - name: my-server
+    transport: stdio
+    command: ["${SERVER_BIN:-/usr/local/bin/my-mcp-server}", "--config", "$CONFIG_PATH"]
+```
+
 ## MCP servers
 
 External MCP servers are started as subprocesses and connected via stdio or HTTP.
