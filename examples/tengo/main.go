@@ -25,7 +25,7 @@ func main() {
 
 	eng, cleanup, err := leash.New(ctx,
 		leash.WithMaxDuration(10*time.Second),
-		leash.WithAllowedBinaries("echo"),
+		leash.WithAllowedBinaries("echo", "ls", "cat"),
 		leash.WithTengoSkillDir(skillsDir),
 	)
 	if err != nil {
@@ -68,12 +68,13 @@ func main() {
 	result, err = eng.Exec(ctx, `echo "leash" | repeat 3`)
 	printResult(result, err)
 
-	// ── 5. Validation de l'arg count (valeur invalide) ───────────────────────
+// ── 5. Validation de l'arg count (valeur invalide) ───────────────────────
 	fmt.Println(sep)
 	fmt.Println("5. Validation regexp : count=0 invalide (pattern ^[1-9][0-9]*$)")
 	fmt.Println(sep)
 
 	result, err = eng.Exec(ctx, `echo "leash" | repeat 0`)
+
 	printResult(result, err)
 
 	fmt.Println(sep)

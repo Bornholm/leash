@@ -28,6 +28,17 @@
 //	// - ewrite(s) : écrire sur stderr
 //	// - env(key)  : lire une variable d'environnement du script en cours
 //	// - exit_code : affecter un int non-nul pour signaler une erreur (défaut 0)
+//	//
+//	// Module sandbox (commandes via la sandbox) :
+//	// - sandbox.exec(cmd, args)  → exécuter commande, retourne {stdout, stderr, code}
+//	// - sandbox.exec_out(cmd, args) → exécuter commande, retourne juste stdout
+//
+//	// Exemple avec sandbox :
+//	// result := sandbox.exec("ls", ["-la", "/tmp"])
+//	// if result.code != 0 {
+//	//     ewrite("error: " + result.stderr)
+//	// }
+//	// write(result.stdout)
 //
 //	text := import("text")
 //	result := text.to_upper(args[0])
@@ -80,6 +91,7 @@ func LoadScript(src []byte) (*skill.Skill, error) {
 		"ewrite":    makeEwriteFn(io.Discard),
 		"env":       makeEnvFn(func(string) string { return "" }),
 		"exit_code": &tengosdk.Int{Value: 0},
+		"sandbox":   &tengosdk.Map{Value: map[string]tengosdk.Object{}},
 	}
 	for name, val := range placeholders {
 		if err := s.Add(name, val); err != nil {

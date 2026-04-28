@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -106,6 +107,16 @@ func (r *Runner) ExecWithStreams(ctx context.Context, script string, stdin io.Re
 	ctx, cancel := context.WithTimeout(ctx, r.policy.MaxExecDuration())
 	defer cancel()
 	ctx = sandbox.ContextWithSandbox(ctx, r.sandbox)
+
+	// Si PersistentTmp est activé, créer un répertoire tmp partagé entre toutes les commandes du script.
+	if r.sandbox.Config().PersistentTmp {
+		tmpDir, err := os.MkdirTemp("", "leash-tmp-*")
+		if err != nil {
+			return nil, fmt.Errorf("create shared tmp dir: %w", err)
+		}
+		defer os.RemoveAll(tmpDir)
+		ctx = sandbox.ContextWithTmpDir(ctx, tmpDir)
+	}
 
 	// 5. Streams bornés
 	limitedOut := newLimitedWriter(stdout, r.policy.MaxOutputBytes())

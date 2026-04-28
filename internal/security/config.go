@@ -103,6 +103,11 @@ func LoadPolicyConfig(path string) (*PolicyConfig, error) {
 	if err := yaml.Unmarshal([]byte(expanded), &cfg); err != nil {
 		return nil, fmt.Errorf("parsing policy file: %w", err)
 	}
+
+	if cfg.Sandbox.Enabled && cfg.Sandbox.PersistentTmp && len(cfg.Sandbox.Tmpfs) == 0 {
+		cfg.Sandbox.Tmpfs = []string{"/tmp"}
+	}
+
 	return &cfg, nil
 }
 

@@ -126,8 +126,21 @@ func (ms *MCPServer) handleExecuteShell(_ context.Context, req *mcp.CallToolRequ
 	if err := json.Unmarshal(req.Params.Arguments, &args); err != nil {
 		return errorResult("invalid parameters: " + err.Error()), nil
 	}
-	script, ok := args["script"].(string)
-	if !ok || script == "" {
+
+	var (
+		script string
+		ok     bool
+	)
+
+	aliases := []string{"script", "command"}
+	for _, alias := range aliases {
+		script, ok = args[alias].(string)
+		if ok {
+			break
+		}
+	}
+
+	if script == "" {
 		return errorResult("parameter 'script' is required"), nil
 	}
 

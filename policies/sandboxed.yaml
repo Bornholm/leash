@@ -54,3 +54,5 @@ sandbox:
     ipc: true
     uts: true
   die_with_parent: true
+  # persistent_tmp: true   # Uncomment to share /tmp across all commands in a script.
+  #                        # Without this, each command gets a fresh empty tmpfs.

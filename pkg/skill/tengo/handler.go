@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/bornholm/leash/pkg/skill"
+	"github.com/bornholm/leash/pkg/skill/tengo/modules"
 	tengosdk "github.com/d5/tengo/v2"
 )
 
@@ -32,6 +33,7 @@ func MakeHandler(skillName string, compiled *tengosdk.Compiled) skill.HandlerFun
 			"ewrite":    makeEwriteFn(c.Stderr),
 			"env":       makeEnvFn(c.Env),
 			"exit_code": &tengosdk.Int{Value: 0},
+			"sandbox":   modules.MakeSandboxModule(ctx, c.Stdin, c.Stdout, c.Stderr, c.SafeEnv),
 		}
 
 		for name, val := range injections {

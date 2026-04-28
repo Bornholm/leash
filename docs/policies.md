@@ -2,13 +2,14 @@
 
 Policies are YAML files that define what the engine is allowed to do. Pass one with `--policy`.
 
-Three presets are provided in `policies/`:
+Four presets are provided in `policies/`:
 
 | File               | Description                                       |
 | ------------------ | ------------------------------------------------- |
 | `default.yaml`     | Balanced — common read-only binaries, 30s timeout |
 | `restrictive.yaml` | Minimal binary set, tight limits                  |
 | `permissive.yaml`  | Wider binary set, relaxed limits                  |
+| `sandboxed.yaml`   | Bubblewrap filesystem isolation example           |
 
 ## Reference
 
@@ -56,6 +57,28 @@ skills:
 #     command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
 #     env:                         # Environment variables FOR the MCP server process
 #       SOME_VAR: value           # (not injected into shell commands)
+
+sandbox:
+  enabled: false            # Set to true to activate filesystem isolation
+  backend: bwrap            # none | bwrap | chroot
+  readonly_binds:           # Paths exposed read-only inside the sandbox
+    - /usr
+  readwrite_binds:          # Paths exposed read-write inside the sandbox
+    - source: /tmp/work
+      target: /work
+  tmpfs:                    # Paths mounted as ephemeral tmpfs (or shared — see below)
+    - /tmp
+  symlinks:                 # Symlinks to create inside the namespace (merged-usr systems)
+    - source: usr/bin
+      target: /bin
+  workdir: /work            # Working directory inside the sandbox
+  unshare:
+    network: true           # Isolate network namespace
+    pid: true               # Isolate PID namespace
+    ipc: true               # Isolate IPC namespace
+    uts: true               # Isolate UTS (hostname) namespace
+  die_with_parent: true     # Kill sandbox if the parent process dies
+  persistent_tmp: false     # Share /tmp across all commands within a script execution
 ```
 
 ## Environment variable interpolation

@@ -39,7 +39,7 @@ func validateBwrapConfig(cfg Config) error {
 
 func (s *bwrapSandbox) Name() string { return "bwrap" }
 
-func (s *bwrapSandbox) buildArgs(origEnv []string) []string {
+func (s *bwrapSandbox) buildArgs(origEnv []string, sharedTmpDir string) []string {
 	args := []string{"--new-session"}
 
 	if s.cfg.DieWithParent {
@@ -53,7 +53,11 @@ func (s *bwrapSandbox) buildArgs(origEnv []string) []string {
 		args = append(args, "--bind", b.Source, b.Target)
 	}
 	for _, t := range s.cfg.Tmpfs {
-		args = append(args, "--tmpfs", t)
+		if t == "/tmp" && sharedTmpDir != "" {
+			args = append(args, "--bind", sharedTmpDir, "/tmp")
+		} else {
+			args = append(args, "--tmpfs", t)
+		}
 	}
 	for _, sym := range s.cfg.Symlinks {
 		args = append(args, "--symlink", sym.Source, sym.Target)
@@ -96,7 +100,8 @@ func (s *bwrapSandbox) buildArgs(origEnv []string) []string {
 }
 
 func (s *bwrapSandbox) Wrap(ctx context.Context, cmd *exec.Cmd) (*exec.Cmd, error) {
-	bwrapArgs := s.buildArgs(cmd.Env)
+	sharedTmpDir := TmpDirFromContext(ctx)
+	bwrapArgs := s.buildArgs(cmd.Env, sharedTmpDir)
 	bwrapArgs = append(bwrapArgs, "--")
 	bwrapArgs = append(bwrapArgs, cmd.Path)
 	bwrapArgs = append(bwrapArgs, cmd.Args[1:]...)

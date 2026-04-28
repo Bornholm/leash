@@ -211,6 +211,17 @@ func WithAuditWriter(w io.Writer) Option {
 	}
 }
 
+// WithPersistentTmp active le partage de /tmp entre toutes les commandes d'un même script.
+// Quand activé, un répertoire temporaire hôte est créé pour chaque appel ExecWithStreams et
+// monté comme /tmp dans chaque processus bwrap, ce qui permet aux fichiers écrits dans /tmp
+// de persister entre les commandes du script. Requiert backend bwrap avec /tmp dans tmpfs.
+func WithPersistentTmp(enabled bool) Option {
+	return func(c *config) error {
+		c.sandboxConfig.PersistentTmp = enabled
+		return nil
+	}
+}
+
 // WithSandbox active l'isolation filesystem avec la configuration fournie.
 // Si backend est "none" ou vide, aucun changement comportemental.
 func WithSandbox(cfg sandbox.Config) Option {

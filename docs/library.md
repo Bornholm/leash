@@ -101,6 +101,8 @@ for _, cmd := range result.Audit.Commands {
 | `WithRequireConfirmation(names...)` | Skills requiring `CONFIRM_<NAME>=yes` |
 | `WithSkill(s)` | Register a single skill |
 | `WithSkills(s...)` | Register multiple skills |
+| `WithSandbox(cfg)` | Activate filesystem isolation with the given `sandbox.Config` |
+| `WithPersistentTmp(enabled)` | Share `/tmp` across all commands within a script execution (bwrap only) |
 | `WithMCPServer(cfg)` | Connect an external MCP server |
 | `WithAuditWriter(w)` | Destination for JSON audit logs |
 

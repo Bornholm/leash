@@ -83,9 +83,27 @@ sandbox:
     ipc: true
     uts: true
   die_with_parent: true
+  persistent_tmp: false # see below
 ```
 
 The sandbox backend name appears in each audit record as `"sandbox": "bwrap"` (or `"none"`).
+
+### Persistent `/tmp` across commands (`persistent_tmp`)
+
+By default each external command runs in a separate bwrap process with its own fresh tmpfs, so files written to `/tmp` in one command are invisible to the next.
+
+Setting `persistent_tmp: true` replaces the per-process tmpfs with a single host-side temporary directory that is bind-mounted as `/tmp` inside every bwrap process for the duration of a script execution. Files written to `/tmp` by any command — whether via shell redirections or OS binaries — are visible to all subsequent commands in the same script.
+
+```yaml
+sandbox:
+  enabled: true
+  backend: bwrap
+  tmpfs:
+    - /tmp          # required — persistent_tmp replaces this entry
+  persistent_tmp: true
+```
+
+The shared directory is created with `os.MkdirTemp` at the start of each `ExecWithStreams` call and removed when the call returns. All other security layers (binary allowlist, blocked patterns, rate limiting, audit trail) remain fully active.
 
 ## Skill confirmation
 

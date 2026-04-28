@@ -14,6 +14,7 @@ type Config struct {
 	DieWithParent  bool          `yaml:"die_with_parent"`
 	UID            *uint32       `yaml:"uid,omitempty"`
 	GID            *uint32       `yaml:"gid,omitempty"`
+	PersistentTmp  bool          `yaml:"persistent_tmp"`
 }
 
 // BindMount décrit un montage bind avec source et cible distincts.

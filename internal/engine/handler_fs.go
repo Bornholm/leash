@@ -37,6 +37,12 @@ func NewFSOpenHandler(cfg sandbox.Config) interp.OpenHandlerFunc {
 		// Tmpfs → lecture et écriture (éphémère, cohérent avec bwrap)
 		for _, t := range cfg.Tmpfs {
 			if isUnder(absPath, t) {
+				if cfg.PersistentTmp {
+					if sharedTmpDir := sandbox.TmpDirFromContext(ctx); sharedTmpDir != "" {
+						rel := strings.TrimPrefix(absPath, filepath.Clean(t))
+						return os.OpenFile(filepath.Join(sharedTmpDir, rel), flag, perm)
+					}
+				}
 				return os.OpenFile(path, flag, perm)
 			}
 		}
@@ -86,6 +92,12 @@ func NewFSReadDirHandler(cfg sandbox.Config) interp.ReadDirHandlerFunc2 {
 		}
 		for _, t := range cfg.Tmpfs {
 			if isUnder(absPath, t) {
+				if cfg.PersistentTmp {
+					if sharedTmpDir := sandbox.TmpDirFromContext(ctx); sharedTmpDir != "" {
+						rel := strings.TrimPrefix(absPath, filepath.Clean(t))
+						return os.ReadDir(filepath.Join(sharedTmpDir, rel))
+					}
+				}
 				return os.ReadDir(path)
 			}
 		}
