@@ -1,6 +1,7 @@
 package sandbox_test
 
 import (
+	"bytes"
 	"context"
 	"os/exec"
 	"strings"
@@ -13,6 +14,18 @@ func requireBwrap(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("bwrap"); err != nil {
 		t.Skip("bwrap not available, skipping")
+	}
+	// Vérifie que bwrap peut réellement créer un namespace (user namespaces disponibles).
+	var stderr bytes.Buffer
+	cmd := exec.Command("bwrap",
+		"--ro-bind", "/usr", "/usr",
+		"--proc", "/proc",
+		"--dev", "/dev",
+		"--", "true",
+	)
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		t.Skipf("bwrap non fonctionnel (user namespaces indisponibles ?): %v — %s", err, stderr.String())
 	}
 }
 
@@ -104,12 +117,15 @@ func TestBwrap_Integration_ListFiles(t *testing.T) {
 	cmd := exec.Command("/bin/ls", "/tmp-work")
 	cmd.Env = []string{"PATH=/usr/bin:/bin"}
 
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
 	wrapped, err := sb.Wrap(context.Background(), cmd)
 	if err != nil {
 		t.Fatalf("Wrap: %v", err)
 	}
 	if err := wrapped.Run(); err != nil {
-		t.Fatalf("exécution ls dans sandbox: %v", err)
+		t.Fatalf("exécution ls dans sandbox: %v — stderr: %s", err, stderr.String())
 	}
 }
 
