@@ -51,18 +51,6 @@ Start an MCP server on stdin/stdout. Use this with Claude Desktop and other MCP 
 ./leash --policy policies/default.yaml mcp stdio
 ```
 
-### `leash mcp http`
-
-Start an MCP server over HTTP.
-
-| Flag | Env var | Default | Description |
-|------|---------|---------|-------------|
-| `--addr`, `-a` | `LEASH_MCP_ADDR` | `:8080` | Listen address |
-
-```bash
-./leash --policy policies/default.yaml mcp http --addr :9000
-```
-
 ## Loading skills
 
 ### Tengo skills

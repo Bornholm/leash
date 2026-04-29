@@ -48,7 +48,7 @@ func init() {
 	rootCmd.PersistentFlags().StringArrayVar(&shellSkillDirs, "shell-skills", nil, "Répertoire(s) de skills shell (*.sh)")
 
 	rootCmd.AddCommand(replCmd, mcpCmd, execCmd)
-	mcpCmd.AddCommand(mcpStdioCmd, mcpHTTPCmd)
+	mcpCmd.AddCommand(mcpStdioCmd)
 }
 
 // --- leash repl ---
@@ -70,7 +70,7 @@ var replCmd = &cobra.Command{
 
 var mcpCmd = &cobra.Command{
 	Use:   "mcp",
-	Short: "Transports MCP (stdio ou http)",
+	Short: "Transports MCP",
 }
 
 var mcpStdioCmd = &cobra.Command{
@@ -84,27 +84,6 @@ var mcpStdioCmd = &cobra.Command{
 		defer cleanup()
 		return mcptransport.New(eng).ServeStdio()
 	},
-}
-
-var mcpHTTPAddr string
-
-var mcpHTTPCmd = &cobra.Command{
-	Use:   "http",
-	Short: "Démarrer le serveur MCP en mode HTTP",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		eng, cleanup, err := buildEngine(cmd.Context(), policyFile, auditLogFile)
-		if err != nil {
-			return err
-		}
-		defer cleanup()
-		fmt.Fprintf(os.Stderr, "Starting MCP HTTP server on %s\n", mcpHTTPAddr)
-		return mcptransport.New(eng).ServeHTTP(mcpHTTPAddr)
-	},
-}
-
-func init() {
-	mcpHTTPCmd.Flags().StringVarP(&mcpHTTPAddr, "addr", "a",
-		envOr("LEASH_MCP_ADDR", ":8080"), "Adresse d'écoute du serveur HTTP")
 }
 
 // --- leash exec ---

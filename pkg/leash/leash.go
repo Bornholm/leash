@@ -106,6 +106,7 @@ func New(ctx context.Context, opts ...Option) (Engine, func(), error) {
 	}
 
 	eng := engine.New(pol, reg, auditor, rl, sb)
+	cleanupFns = append(cleanupFns, eng.Close)
 
 	cleanup := func() {
 		for _, fn := range cleanupFns {

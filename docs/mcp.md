@@ -4,16 +4,10 @@ LeaSH can run as an [MCP](https://modelcontextprotocol.io) server, exposing the 
 
 ## Transports
 
-### stdio (recommended for local use)
+### stdio
 
 ```bash
 ./leash --policy policies/default.yaml mcp stdio
-```
-
-### HTTP
-
-```bash
-./leash --policy policies/default.yaml mcp http --addr :8080
 ```
 
 ## Exposed tools

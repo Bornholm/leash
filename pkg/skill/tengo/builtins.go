@@ -61,9 +61,12 @@ func makeEnvFn(envFn func(string) string) *tengosdk.UserFunction {
 
 // makeStdinFn crée une UserFunction Tengo qui lit stdin ligne par ligne.
 // Le scanner est créé une fois pour toute la durée de vie du handler invoqué.
-// Signature dans les scripts : stdin() -> string (chaîne vide = EOF)
+// Signature dans les scripts : stdin() -> string | undefined
+// Retourne la ligne lue (sans \n), ou undefined à l'EOF.
+// Les lignes vides retournent "" (chaîne vide), pas undefined.
 func makeStdinFn(r io.Reader) *tengosdk.UserFunction {
 	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 	return &tengosdk.UserFunction{
 		Name: "stdin",
 		Value: func(args ...tengosdk.Object) (tengosdk.Object, error) {
@@ -73,7 +76,7 @@ func makeStdinFn(r io.Reader) *tengosdk.UserFunction {
 			if err := scanner.Err(); err != nil {
 				return nil, fmt.Errorf("stdin: %w", err)
 			}
-			return &tengosdk.String{Value: ""}, nil
+			return tengosdk.UndefinedValue, nil
 		},
 	}
 }

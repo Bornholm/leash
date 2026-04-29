@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"strings"
 
 	"github.com/bornholm/leash/internal/engine"
@@ -88,15 +87,6 @@ To get help on a specific command:
 // ServeStdio démarre le serveur MCP sur stdin/stdout.
 func (ms *MCPServer) ServeStdio() error {
 	return ms.server.Run(context.Background(), &mcp.StdioTransport{})
-}
-
-// ServeHTTP démarre le serveur MCP en HTTP Streamable sur l'adresse donnée.
-func (ms *MCPServer) ServeHTTP(addr string) error {
-	handler := mcp.NewStreamableHTTPHandler(
-		func(_ *http.Request) *mcp.Server { return ms.server },
-		nil,
-	)
-	return http.ListenAndServe(addr, handler) //nolint:gosec
 }
 
 func (ms *MCPServer) registerTools() {

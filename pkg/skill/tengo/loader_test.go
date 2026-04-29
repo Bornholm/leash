@@ -22,7 +22,7 @@ category: text
 text := import("text")
 for {
     line := stdin()
-    if line == "" { break }
+    if is_undefined(line) { break }
     write(text.to_upper(line) + "\n")
 }
 `)
@@ -49,7 +49,7 @@ description: Echoes stdin lines
 
 for {
     line := stdin()
-    if line == "" { break }
+    if is_undefined(line) { break }
     write(line + "\n")
 }
 `)
@@ -77,6 +77,47 @@ for {
 
 	got := stdout.String()
 	want := "hello\nworld\n"
+	if got != want {
+		t.Errorf("stdout = %q, want %q", got, want)
+	}
+}
+
+func TestLoadScript_StdinEmptyLinesPreserved(t *testing.T) {
+	// stdin() should return "" for blank lines and undefined only for EOF.
+	src := []byte(`/* skill
+name: echo_blank
+description: Echoes stdin preserving blank lines
+*/
+
+for {
+    line := stdin()
+    if is_undefined(line) { break }
+    write(line + "\n")
+}
+`)
+	sk, err := skilltengo.LoadScript(src)
+	if err != nil {
+		t.Fatalf("LoadScript: %v", err)
+	}
+
+	stdinContent := strings.NewReader("first\n\nsecond\n\nthird\n")
+	var stdout strings.Builder
+
+	call := &skill.Call{
+		Args:   []string{},
+		Flags:  map[string]string{},
+		Stdin:  stdinContent,
+		Stdout: &stdout,
+		Stderr: io.Discard,
+		Env:    func(string) string { return "" },
+	}
+
+	if err := sk.Handler(context.Background(), call); err != nil {
+		t.Fatalf("Handler: %v", err)
+	}
+
+	got := stdout.String()
+	want := "first\n\nsecond\n\nthird\n"
 	if got != want {
 		t.Errorf("stdout = %q, want %q", got, want)
 	}

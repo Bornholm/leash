@@ -22,15 +22,18 @@ import (
 
 // Runner est l'implémentation concrète de Engine.
 type Runner struct {
-	policy  security.PolicyEngine
-	reg     *registry.Registry
-	auditor *security.AuditLogger
-	rl      *security.RateLimiter
-	sandbox sandbox.Sandbox
+	policy       security.PolicyEngine
+	reg          *registry.Registry
+	auditor      *security.AuditLogger
+	rl           *security.RateLimiter
+	sandbox      sandbox.Sandbox
+	sharedTmpDir string // répertoire /tmp partagé entre tous les appels Exec quand PersistentTmp est activé
 }
 
 // New crée un Runner avec tous ses composants.
 // Si sb est nil, le backend none (no-op) est utilisé.
+// Si PersistentTmp est activé, un répertoire tmp partagé est créé une fois pour
+// toute la durée de vie du Runner, et réutilisé entre tous les appels Exec.
 func New(
 	pol security.PolicyEngine,
 	reg *registry.Registry,
@@ -41,12 +44,26 @@ func New(
 	if sb == nil {
 		sb = sandbox.NewNone()
 	}
-	return &Runner{
+	r := &Runner{
 		policy:  pol,
 		reg:     reg,
 		auditor: auditor,
 		rl:      rl,
 		sandbox: sb,
+	}
+	if sb.Config().PersistentTmp {
+		if tmpDir, err := os.MkdirTemp("", "leash-tmp-*"); err == nil {
+			r.sharedTmpDir = tmpDir
+		}
+	}
+	return r
+}
+
+// Close libère les ressources du Runner (répertoire tmp partagé si PersistentTmp est activé).
+func (r *Runner) Close() {
+	if r.sharedTmpDir != "" {
+		_ = os.RemoveAll(r.sharedTmpDir)
+		r.sharedTmpDir = ""
 	}
 }
 
@@ -108,14 +125,10 @@ func (r *Runner) ExecWithStreams(ctx context.Context, script string, stdin io.Re
 	defer cancel()
 	ctx = sandbox.ContextWithSandbox(ctx, r.sandbox)
 
-	// Si PersistentTmp est activé, créer un répertoire tmp partagé entre toutes les commandes du script.
-	if r.sandbox.Config().PersistentTmp {
-		tmpDir, err := os.MkdirTemp("", "leash-tmp-*")
-		if err != nil {
-			return nil, fmt.Errorf("create shared tmp dir: %w", err)
-		}
-		defer os.RemoveAll(tmpDir)
-		ctx = sandbox.ContextWithTmpDir(ctx, tmpDir)
+	// Si PersistentTmp est activé, injecter le répertoire tmp partagé créé à
+	// l'initialisation du Runner, afin que /tmp persiste entre les appels Exec.
+	if r.sharedTmpDir != "" {
+		ctx = sandbox.ContextWithTmpDir(ctx, r.sharedTmpDir)
 	}
 
 	// 5. Streams bornés
