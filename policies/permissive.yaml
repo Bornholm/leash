@@ -6,7 +6,7 @@ execution:
 
 rate_limits:
   global: 1000/minute
-  per_skill: {}
+  per_builtin: {}
 
 allowed_binaries:
   - grep
@@ -48,8 +48,8 @@ environment:
     HOME: /tmp/leash
     PATH: /usr/local/bin:/usr/bin:/bin
 
-skills:
-  enabled: []          # vide = tous les tools MCP enregistrés sont autorisés
+builtins:
+  enabled: []          # vide = tous les builtins enregistrés sont autorisés
   require_confirmation: []
 
 # mcp_servers:

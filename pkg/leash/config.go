@@ -6,7 +6,7 @@ import (
 
 	"github.com/bornholm/leash/internal/security"
 	"github.com/bornholm/leash/internal/security/sandbox"
-	"github.com/bornholm/leash/pkg/skill"
+	"github.com/bornholm/leash/pkg/builtin"
 )
 
 type rateSpec struct {
@@ -20,8 +20,8 @@ type config struct {
 	maxCommandsPerScript int
 	maxSubshells         int
 
-	globalRateLimit rateSpec
-	perSkillRates   map[string]rateSpec
+	globalRateLimit  rateSpec
+	perBuiltinRates map[string]rateSpec
 
 	allowedBinaries []string
 	blockedPatterns []string
@@ -29,11 +29,11 @@ type config struct {
 	inheritEnv bool
 	staticEnv  map[string]string
 
-	enabledSkills       []string
+	enabledBuiltins     []string
 	requireConfirmation []string
 
 	mcpServers    []security.MCPServerConfig
-	skills        []*skill.Skill
+	builtins      []*builtin.Builtin
 	auditWriter   io.Writer
 	sandboxConfig sandbox.Config
 }
@@ -52,10 +52,10 @@ func (c *config) toPolicyConfig() *security.PolicyConfig {
 		}
 	}
 
-	if len(c.perSkillRates) > 0 {
-		cfg.RateLimits.PerSkill = make(map[string]security.RateSpec, len(c.perSkillRates))
-		for name, spec := range c.perSkillRates {
-			cfg.RateLimits.PerSkill[name] = security.RateSpec{Count: spec.count, Window: spec.window}
+	if len(c.perBuiltinRates) > 0 {
+		cfg.RateLimits.PerBuiltin = make(map[string]security.RateSpec, len(c.perBuiltinRates))
+		for name, spec := range c.perBuiltinRates {
+			cfg.RateLimits.PerBuiltin[name] = security.RateSpec{Count: spec.count, Window: spec.window}
 		}
 	}
 
@@ -63,8 +63,8 @@ func (c *config) toPolicyConfig() *security.PolicyConfig {
 	cfg.BlockedPatterns = c.blockedPatterns
 	cfg.Environment.Inherit = c.inheritEnv
 	cfg.Environment.Static = c.staticEnv
-	cfg.Skills.Enabled = c.enabledSkills
-	cfg.Skills.RequireConfirmation = c.requireConfirmation
+	cfg.Builtins.Enabled = c.enabledBuiltins
+	cfg.Builtins.RequireConfirmation = c.requireConfirmation
 	cfg.MCPServers = c.mcpServers
 	cfg.Sandbox = c.sandboxConfig
 	return cfg
@@ -77,17 +77,17 @@ func (c *config) applyPolicyConfig(p *security.PolicyConfig) {
 	c.maxSubshells = p.Execution.MaxSubshells
 	c.globalRateLimit = rateSpec{count: p.RateLimits.Global.Count, window: p.RateLimits.Global.Window}
 
-	c.perSkillRates = make(map[string]rateSpec, len(p.RateLimits.PerSkill))
-	for name, spec := range p.RateLimits.PerSkill {
-		c.perSkillRates[name] = rateSpec{count: spec.Count, window: spec.Window}
+	c.perBuiltinRates = make(map[string]rateSpec, len(p.RateLimits.PerBuiltin))
+	for name, spec := range p.RateLimits.PerBuiltin {
+		c.perBuiltinRates[name] = rateSpec{count: spec.Count, window: spec.Window}
 	}
 
 	c.allowedBinaries = p.AllowedBinaries
 	c.blockedPatterns = p.BlockedPatterns
 	c.inheritEnv = p.Environment.Inherit
 	c.staticEnv = p.Environment.Static
-	c.enabledSkills = p.Skills.Enabled
-	c.requireConfirmation = p.Skills.RequireConfirmation
+	c.enabledBuiltins = p.Builtins.Enabled
+	c.requireConfirmation = p.Builtins.RequireConfirmation
 	c.mcpServers = p.MCPServers
 	c.sandboxConfig = p.Sandbox
 }

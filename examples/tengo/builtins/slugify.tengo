@@ -1,4 +1,4 @@
-/* skill
+/* builtin
 name: slugify
 description: Converts a string to a URL-friendly slug (lowercase, hyphens)
 category: text

@@ -1,4 +1,4 @@
-/* skill
+/* builtin
 name: repeat
 description: Repeats each stdin line N times
 category: text

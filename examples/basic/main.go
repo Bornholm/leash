@@ -2,7 +2,7 @@
 //
 // Cet exemple montre comment :
 //   - créer un Engine via l'API OptionFunc
-//   - enregistrer des skills personnalisés
+//   - enregistrer des builtins personnalisés
 //   - exécuter des scripts shell sandboxés
 //   - lire l'audit trail
 //   - observer le comportement face aux commandes bloquées
@@ -18,29 +18,24 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bornholm/leash/pkg/builtin"
 	"github.com/bornholm/leash/pkg/leash"
-	"github.com/bornholm/leash/pkg/skill"
 )
 
 func main() {
 	ctx := context.Background()
 
 	eng, cleanup, err := leash.New(ctx,
-		// Limites d'exécution
 		leash.WithMaxDuration(10*time.Second),
 		leash.WithMaxCommandsPerScript(20),
 
-		// Binaires système autorisés
 		leash.WithAllowedBinaries("echo", "grep", "tr", "wc", "sort", "head"),
 
-		// Environnement injecté dans chaque exécution
 		leash.WithEnvVar("APP_ENV", "sandbox"),
 
-		// Skills personnalisés
-		leash.WithSkill(newWordCountSkill()),
-		leash.WithSkill(newUppercaseSkill()),
+		leash.WithBuiltin(newWordCountBuiltin()),
+		leash.WithBuiltin(newUppercaseBuiltin()),
 
-		// Audit vers stderr
 		leash.WithAuditWriter(os.Stderr),
 	)
 	if err != nil {
@@ -64,9 +59,9 @@ func main() {
 		fmt.Printf("exit   : %d\n", result.ExitCode)
 	}
 
-	// ── 2. Skill personnalisé : word-count ───────────────────────────────────
+	// ── 2. Builtin personnalisé : word-count ───────────────────────────────────
 	fmt.Println(separator)
-	fmt.Println("2. Skill personnalisé : word-count")
+	fmt.Println("2. Builtin personnalisé : word-count")
 	fmt.Println(separator)
 
 	script := `echo "the quick brown fox jumps over the lazy dog" | word-count`
@@ -78,9 +73,9 @@ func main() {
 		fmt.Printf("exit   : %d\n", result.ExitCode)
 	}
 
-	// ── 3. Skill avec flag : uppercase ──────────────────────────────────────
+	// ── 3. Builtin avec flag : uppercase ──────────────────────────────────────
 	fmt.Println(separator)
-	fmt.Println("3. Skill avec flag : uppercase --prefix")
+	fmt.Println("3. Builtin avec flag : uppercase --prefix")
 	fmt.Println(separator)
 
 	result, err = eng.Exec(ctx, `echo "hello world" | uppercase --prefix=">>> "`)
@@ -125,11 +120,11 @@ func main() {
 			if cmd.Blocked {
 				status = "BLOQUÉ (" + cmd.Reason + ")"
 			}
-			fmt.Printf("  %-15s args=%-20v exit=%-3d skill=%-5v %s\n",
+			fmt.Printf("  %-15s args=%-20v exit=%-3d builtin=%-5v %s\n",
 				cmd.Command,
 				cmd.Args,
 				cmd.ExitCode,
-				cmd.IsSkill,
+				cmd.IsBuiltin,
 				status,
 			)
 		}
@@ -167,13 +162,12 @@ func main() {
 	fmt.Println(separator)
 }
 
-// newWordCountSkill crée un skill qui compte les mots lus sur stdin.
-func newWordCountSkill() *skill.Skill {
-	return skill.New("word-count").
+func newWordCountBuiltin() *builtin.Builtin {
+	return builtin.New("word-count").
 		Description("Compte le nombre de mots lus sur stdin").
 		Category("text").
 		Example("Compter les mots d'une phrase", "echo 'foo bar baz' | word-count").
-		Handle(func(ctx context.Context, c *skill.Call) error {
+		Handle(func(ctx context.Context, c *builtin.Call) error {
 			data, err := io.ReadAll(c.Stdin)
 			if err != nil {
 				return err
@@ -184,16 +178,14 @@ func newWordCountSkill() *skill.Skill {
 		})
 }
 
-// newUppercaseSkill crée un skill qui convertit stdin en majuscules,
-// avec un flag optionnel --prefix.
-func newUppercaseSkill() *skill.Skill {
-	return skill.New("uppercase").
+func newUppercaseBuiltin() *builtin.Builtin {
+	return builtin.New("uppercase").
 		Description("Convertit stdin en majuscules").
 		Category("text").
 		Flag("prefix", "p", "", "Préfixe à ajouter devant la sortie").
 		Example("Majuscules simples", "echo 'hello' | uppercase").
 		Example("Avec préfixe", "echo 'hello' | uppercase --prefix='>> '").
-		Handle(func(ctx context.Context, c *skill.Call) error {
+		Handle(func(ctx context.Context, c *builtin.Call) error {
 			data, err := io.ReadAll(c.Stdin)
 			if err != nil {
 				return err

@@ -12,33 +12,31 @@ import (
 	"github.com/bornholm/leash/internal/security/sandbox"
 )
 
-// policyEngine est l'implémentation concrète de PolicyEngine.
 type policyEngine struct {
 	cfg             *PolicyConfig
-	allowedBinaries map[string]struct{}
-	enabledSkills   map[string]struct{}
-	confirmSkills   map[string]struct{}
+	allowedBinaries  map[string]struct{}
+	enabledBuiltins  map[string]struct{}
+	confirmBuiltins  map[string]struct{}
 }
 
-// NewPolicyEngine crée un PolicyEngine à partir d'une configuration.
 func NewPolicyEngine(cfg *PolicyConfig) PolicyEngine {
 	allowed := make(map[string]struct{}, len(cfg.AllowedBinaries))
 	for _, b := range cfg.AllowedBinaries {
 		allowed[b] = struct{}{}
 	}
-	enabled := make(map[string]struct{}, len(cfg.Skills.Enabled))
-	for _, s := range cfg.Skills.Enabled {
+	enabled := make(map[string]struct{}, len(cfg.Builtins.Enabled))
+	for _, s := range cfg.Builtins.Enabled {
 		enabled[s] = struct{}{}
 	}
-	confirm := make(map[string]struct{}, len(cfg.Skills.RequireConfirmation))
-	for _, s := range cfg.Skills.RequireConfirmation {
+	confirm := make(map[string]struct{}, len(cfg.Builtins.RequireConfirmation))
+	for _, s := range cfg.Builtins.RequireConfirmation {
 		confirm[s] = struct{}{}
 	}
 	return &policyEngine{
-		cfg:             cfg,
-		allowedBinaries: allowed,
-		enabledSkills:   enabled,
-		confirmSkills:   confirm,
+		cfg:              cfg,
+		allowedBinaries:  allowed,
+		enabledBuiltins:  enabled,
+		confirmBuiltins:  confirm,
 	}
 }
 
@@ -90,19 +88,17 @@ func (p *policyEngine) ValidateAST(prog any) error {
 	return validationErr
 }
 
-func (p *policyEngine) CanExecuteSkill(ctx context.Context, name string, args []string) error {
-	// Vérifier si le skill est activé (liste vide = tous activés)
-	if len(p.enabledSkills) > 0 {
-		if _, ok := p.enabledSkills[name]; !ok {
-			return fmt.Errorf("skill %q is not enabled by policy", name)
+func (p *policyEngine) CanExecuteBuiltin(ctx context.Context, name string, args []string) error {
+	if len(p.enabledBuiltins) > 0 {
+		if _, ok := p.enabledBuiltins[name]; !ok {
+			return fmt.Errorf("builtin %q is not enabled by policy", name)
 		}
 	}
 
-	// Vérifier si une confirmation est requise
-	if _, ok := p.confirmSkills[name]; ok {
+	if _, ok := p.confirmBuiltins[name]; ok {
 		envKey := "CONFIRM_" + strings.ToUpper(strings.ReplaceAll(name, "-", "_"))
 		if os.Getenv(envKey) != "yes" {
-			return fmt.Errorf("skill %q requires confirmation: set %s=yes", name, envKey)
+			return fmt.Errorf("builtin %q requires confirmation: set %s=yes", name, envKey)
 		}
 	}
 
@@ -150,8 +146,8 @@ func (p *policyEngine) IsBlockedPattern(script string) (bool, string) {
 	return false, ""
 }
 
-func (p *policyEngine) EnabledSkills() []string {
-	return p.cfg.Skills.Enabled
+func (p *policyEngine) EnabledBuiltins() []string {
+	return p.cfg.Builtins.Enabled
 }
 
 func (p *policyEngine) AllowedBinaries() []string {

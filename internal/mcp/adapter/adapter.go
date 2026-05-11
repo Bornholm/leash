@@ -7,21 +7,18 @@ import (
 	"io"
 	"strings"
 
-	"github.com/bornholm/leash/pkg/skill"
+	"github.com/bornholm/leash/pkg/builtin"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// ToolToSkill convertit un MCP Tool en *skill.Skill prêt à être enregistré.
-// Le nom du skill est "<serverName>_<toolName>" (les -, . et / sont remplacés par _).
-func ToolToSkill(serverName string, tool *mcp.Tool, session *mcp.ClientSession) *skill.Skill {
-	skillName := sanitizeName(serverName) + "_" + sanitizeName(tool.Name)
+func ToolToBuiltin(serverName string, tool *mcp.Tool, session *mcp.ClientSession) *builtin.Builtin {
+	builtinName := sanitizeName(serverName) + "_" + sanitizeName(tool.Name)
 
 	schema := parseInputSchema(tool.InputSchema)
 	args, flags := schemaToArgsDefs(schema)
 
-	// Ajouter --help automatiquement si le schema n'a pas déjà une propriété "help" ou "h"
 	if !schemaHasProperty(schema, "help") && !schemaHasProperty(schema, "h") {
-		flags = append(flags, skill.FlagDef{
+		flags = append(flags, builtin.FlagDef{
 			Name:        "help",
 			Short:       "h",
 			Default:     "",
@@ -29,7 +26,7 @@ func ToolToSkill(serverName string, tool *mcp.Tool, session *mcp.ClientSession) 
 		})
 	}
 
-	b := skill.New(skillName).
+	b := builtin.New(builtinName).
 		Description(tool.Description).
 		Category(serverName)
 
@@ -40,28 +37,24 @@ func ToolToSkill(serverName string, tool *mcp.Tool, session *mcp.ClientSession) 
 		b = b.Flag(f.Name, f.Short, f.Default, f.Description)
 	}
 
-	// Capture les valeurs pour la closure
 	capturedArgs := args
 	capturedFlags := flags
 	capturedTool := tool
 	capturedSchema := schema
 
-	return b.Handle(func(ctx context.Context, c *skill.Call) error {
-		// Gestion de --help
+	return b.Handle(func(ctx context.Context, c *builtin.Call) error {
 		if c.Flags["help"] != "" {
-			return printHelp(c, skillName, capturedTool, capturedArgs, capturedFlags, capturedSchema)
+			return printHelp(c, builtinName, capturedTool, capturedArgs, capturedFlags, capturedSchema)
 		}
 
 		arguments := map[string]any{}
 
-		// Mapper les args positionnels → nom de propriété du schema
 		for i, argDef := range capturedArgs {
 			if i < len(c.Args) {
 				arguments[argDef.Name] = c.Args[i]
 			}
 		}
 
-		// Ajouter les propriétés requises non-scalaires qui n'ont pas d'ArgDef
 		for _, name := range capturedSchema.Required {
 			prop, exists := capturedSchema.Properties[name]
 			if !exists {
@@ -76,7 +69,6 @@ func ToolToSkill(serverName string, tool *mcp.Tool, session *mcp.ClientSession) 
 			arguments[name] = map[string]any{}
 		}
 
-		// Mapper les flags (ignorer "help" qui est notre flag interne)
 		for name, val := range c.Flags {
 			if name == "help" {
 				continue
@@ -95,7 +87,6 @@ func ToolToSkill(serverName string, tool *mcp.Tool, session *mcp.ClientSession) 
 			}
 		}
 
-		// Injection depuis stdin si le schema attend une propriété stdin/input non fournie
 		if stdinKey := stdinPropertyName(capturedSchema); stdinKey != "" {
 			if _, ok := arguments[stdinKey]; !ok {
 				data, err := io.ReadAll(c.Stdin)
@@ -119,20 +110,19 @@ func ToolToSkill(serverName string, tool *mcp.Tool, session *mcp.ClientSession) 
 		text := extractText(result.Content)
 		if result.IsError {
 			fmt.Fprint(c.Stderr, text)
-			return skill.ExitError{Code: 1}
+			return builtin.ExitError{Code: 1}
 		}
 		fmt.Fprint(c.Stdout, text)
 		return nil
 	})
 }
 
-// printHelp affiche l'aide d'un tool MCP sur stdout.
-func printHelp(c *skill.Call, skillName string, tool *mcp.Tool, args []skill.ArgDef, flags []skill.FlagDef, schema inputSchema) error {
+func printHelp(c *builtin.Call, builtinName string, tool *mcp.Tool, args []builtin.ArgDef, flags []builtin.FlagDef, schema inputSchema) error {
 
 	if tool.Description != "" {
 		fmt.Fprintf(c.Stdout, "%s\n\n", tool.Description)
 	}
-	fmt.Fprintf(c.Stdout, "Usage: %s", skillName)
+	fmt.Fprintf(c.Stdout, "Usage: %s", builtinName)
 	for _, a := range args {
 		if a.Required {
 			fmt.Fprintf(c.Stdout, " <%s>", a.Name)
@@ -172,7 +162,6 @@ func printHelp(c *skill.Call, skillName string, tool *mcp.Tool, args []skill.Arg
 			}
 			fmt.Fprintf(c.Stdout, "  %-24s %s%s%s\n", nameWithShort, f.Description, jsonHint, def)
 		}
-		// Afficher les propriétés requises non-scalaires comme flags obligatoires
 		for _, name := range schema.Required {
 			prop, exists := schema.Properties[name]
 			if !exists || !isNonScalarType(prop.Type) {
@@ -188,7 +177,7 @@ func printHelp(c *skill.Call, skillName string, tool *mcp.Tool, args []skill.Arg
 	return nil
 }
 
-func hasRequiredNonScalar(schema inputSchema, args []skill.ArgDef) bool {
+func hasRequiredNonScalar(schema inputSchema, args []builtin.ArgDef) bool {
 	for _, name := range schema.Required {
 		prop, exists := schema.Properties[name]
 		if !exists {
@@ -201,7 +190,7 @@ func hasRequiredNonScalar(schema inputSchema, args []skill.ArgDef) bool {
 	return false
 }
 
-func argNameExists(name string, args []skill.ArgDef) bool {
+func argNameExists(name string, args []builtin.ArgDef) bool {
 	for _, a := range args {
 		if a.Name == name {
 			return true
@@ -256,32 +245,29 @@ func parseInputSchema(raw any) inputSchema {
 	return s
 }
 
-// schemaToArgsDefs convertit un schema en ArgDef (requis) et FlagDef (optionnels).
-func schemaToArgsDefs(s inputSchema) (args []skill.ArgDef, flags []skill.FlagDef) {
+func schemaToArgsDefs(s inputSchema) (args []builtin.ArgDef, flags []builtin.FlagDef) {
 	requiredSet := make(map[string]bool, len(s.Required))
 	for _, name := range s.Required {
 		requiredSet[name] = true
 	}
 
-	// Les args positionnels sont les propriétés requises de type scalaire
 	for _, name := range s.Required {
 		prop := s.Properties[name]
 		if isNonScalarType(prop.Type) {
 			continue
 		}
-		args = append(args, skill.ArgDef{
+		args = append(args, builtin.ArgDef{
 			Name:        name,
 			Description: prop.Description,
 			Required:    true,
 		})
 	}
 
-	// Les flags sont les propriétés optionnelles + les propriétés requises non-scalaires
 	for name, prop := range s.Properties {
 		if requiredSet[name] {
 			continue
 		}
-		flags = append(flags, skill.FlagDef{
+		flags = append(flags, builtin.FlagDef{
 			Name:        name,
 			Short:       "",
 			Default:     "",
@@ -289,7 +275,6 @@ func schemaToArgsDefs(s inputSchema) (args []skill.ArgDef, flags []skill.FlagDef
 		})
 	}
 
-	// Ajouter les propriétés requises non-scalaires comme flags (pour l'aide)
 	for _, name := range s.Required {
 		prop, exists := s.Properties[name]
 		if !exists {
@@ -298,7 +283,7 @@ func schemaToArgsDefs(s inputSchema) (args []skill.ArgDef, flags []skill.FlagDef
 		if !isNonScalarType(prop.Type) {
 			continue
 		}
-		flags = append(flags, skill.FlagDef{
+		flags = append(flags, builtin.FlagDef{
 			Name:        name,
 			Short:       "",
 			Default:     "",

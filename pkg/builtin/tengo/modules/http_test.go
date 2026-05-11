@@ -10,12 +10,10 @@ import (
 
 	tengosdk "github.com/d5/tengo/v2"
 
-	"github.com/bornholm/leash/pkg/skill"
-	skilltengo "github.com/bornholm/leash/pkg/skill/tengo"
-	"github.com/bornholm/leash/pkg/skill/tengo/modules"
+	"github.com/bornholm/leash/pkg/builtin"
+	builtinTengo "github.com/bornholm/leash/pkg/builtin/tengo"
+	"github.com/bornholm/leash/pkg/builtin/tengo/modules"
 )
-
-// --- Helpers ---
 
 func getStr(t *testing.T, m *tengosdk.ImmutableMap, key string) string {
 	t.Helper()
@@ -83,8 +81,6 @@ func tengoMap(pairs ...string) *tengosdk.Map {
 	return m
 }
 
-// --- Tests TengoMapToHeaders ---
-
 func TestTengoMapToHeaders_EmptyMap(t *testing.T) {
 	fn := modules.HTTPModule["get"].(*tengosdk.UserFunction)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -92,7 +88,6 @@ func TestTengoMapToHeaders_EmptyMap(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// Passer une map vide comme headers
 	resp := callFn(t, "get", str(srv.URL), tengoMap())
 	if getInt(t, resp, "status") != 200 {
 		t.Errorf("status = %d, want 200", getInt(t, resp, "status"))
@@ -101,7 +96,6 @@ func TestTengoMapToHeaders_EmptyMap(t *testing.T) {
 }
 
 func TestTengoMapToHeaders_ImmutableMap(t *testing.T) {
-	// Vérifier que *ImmutableMap est accepté comme headers
 	var receivedHeader string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedHeader = r.Header.Get("X-Test")
@@ -149,8 +143,6 @@ func TestTengoMapToHeaders_NonMapType_Error(t *testing.T) {
 		t.Errorf("error should mention 'map', got: %v", err)
 	}
 }
-
-// --- Tests GET ---
 
 func TestHTTPModule_Get_Simple(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -233,8 +225,6 @@ func TestHTTPModule_Get_ConnectionRefused_NoGoError(t *testing.T) {
 	}
 }
 
-// --- Tests POST ---
-
 func TestHTTPModule_Post(t *testing.T) {
 	var receivedBody, receivedCT string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -300,8 +290,6 @@ func TestHTTPModule_Post_WrongArgCount(t *testing.T) {
 	}
 }
 
-// --- Tests PUT ---
-
 func TestHTTPModule_Put(t *testing.T) {
 	var receivedMethod string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -318,8 +306,6 @@ func TestHTTPModule_Put(t *testing.T) {
 		t.Errorf("method = %q, want PUT", receivedMethod)
 	}
 }
-
-// --- Tests DELETE ---
 
 func TestHTTPModule_Delete(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -349,8 +335,6 @@ func TestHTTPModule_Delete_WithHeaders(t *testing.T) {
 		t.Errorf("Authorization = %q, want %q", receivedToken, "Bearer delete-token")
 	}
 }
-
-// --- Tests request générique ---
 
 func TestHTTPModule_Request_Generic_PATCH(t *testing.T) {
 	var receivedMethod string
@@ -398,8 +382,6 @@ func TestHTTPModule_Request_InvalidHeaderType(t *testing.T) {
 	}
 }
 
-// --- Tests headers de réponse ---
-
 func TestHTTPModule_ResponseHeaders(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -429,8 +411,6 @@ func TestHTTPModule_ResponseHeaders(t *testing.T) {
 	}
 }
 
-// --- Test bout-en-bout via LoadScript ---
-
 func TestHTTPModule_EndToEnd_ViaLoadScript(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
@@ -438,7 +418,7 @@ func TestHTTPModule_EndToEnd_ViaLoadScript(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	script := []byte(`/* skill
+	script := []byte(`/* builtin
 name: http_fetch
 description: Fetches a URL and writes the body
 category: http
@@ -458,14 +438,14 @@ if resp.err != "" {
 }
 `)
 
-	sk, err := skilltengo.LoadScript(script)
+	sk, err := builtinTengo.LoadScript(script)
 	if err != nil {
 		t.Fatalf("LoadScript: %v", err)
 	}
 
 	var stdout strings.Builder
 	var stderr strings.Builder
-	call := &skill.Call{
+	call := &builtin.Call{
 		Args:   []string{srv.URL},
 		Flags:  map[string]string{},
 		Stdin:  strings.NewReader(""),

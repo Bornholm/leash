@@ -57,7 +57,7 @@ Add to your MCP client configuration (e.g. `claude_desktop_config.json`):
 - **Audit trail** — every command (blocked or executed) logged as structured JSON
 - **Filesystem sandbox** — bubblewrap (bwrap) or chroot isolation; only bind-mounted paths are accessible
 - **MCP transport** — expose as an MCP tool server for Claude Desktop and other agents
-- **Extensible skills** — register Go functions, Tengo scripts, or shell scripts as shell commands
+- **Extensible builtins** — register Go functions, Tengo scripts, or shell scripts as shell commands
 
 ### Filesystem sandbox example
 
@@ -79,9 +79,9 @@ echo 'cat /etc/shadow' | ./leash --policy policies/sandboxed.yaml exec
 
 - [CLI reference](docs/cli.md) — all commands and flags (includes sandbox YAML reference)
 - [Policy files](docs/policies.md) — control what the engine is allowed to do
-- [Skills — Go](docs/skills.md) — register custom Go functions as shell commands
-- [Skills — Tengo](docs/skills-tengo.md) — write skills as Tengo scripts (no compilation)
-- [Skills — Shell](docs/skills-shell.md) — write skills as POSIX shell scripts
+- [Builtins — Go](docs/builtins.md) — register custom Go functions as shell commands
+- [Builtins — Tengo](docs/builtins-tengo.md) — write builtins as Tengo scripts (no compilation)
+- [Builtins — Shell](docs/builtins-shell.md) — write builtins as POSIX shell scripts
 - [MCP server](docs/mcp.md) — expose LeaSH as an MCP tool set
 - [Go library](docs/library.md) — embed LeaSH in your own application
 - [Security model](docs/security.md) — how isolation and enforcement work

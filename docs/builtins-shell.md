@@ -1,25 +1,25 @@
-# Skills — POSIX shell scripts
+# Builtins — POSIX shell scripts
 
-Skills can be written as POSIX shell scripts (`.sh` files) and loaded from a directory at engine startup. No Go code is required.
+Builtins can be written as POSIX shell scripts (`.sh` files) and loaded from a directory at engine startup. No Go code is required.
 
 ## Loading a directory
 
 ```go
 eng, cleanup, err := leash.New(ctx,
-    leash.WithShellSkillDir("skills/"),
+    leash.WithShellBuiltinDir("builtins/"),
 )
 ```
 
-Every `.sh` file found in `skills/` is loaded as a skill. The skill name comes from the frontmatter (see below); if absent, the filename without extension is used.
+Every `.sh` file found in `builtins/` is loaded as a builtin. The builtin name comes from the frontmatter (see below); if absent, the filename without extension is used.
 
 ## File structure
 
-A shell skill is a plain shell script with an optional YAML frontmatter embedded in a heredoc at the top.
+A shell builtin is a plain shell script with an optional YAML frontmatter embedded in a heredoc at the top.
 
 ```sh
 #!/bin/sh
-: <<'SKILL'
-name: my-skill
+: <<'BUILTIN'
+name: my-builtin
 description: Short description shown in help and MCP manifests
 category: text
 rate_limit: 10       # calls/minute (0 = unlimited)
@@ -36,14 +36,14 @@ flags:
     pattern: "^(plain|upper)$"
 examples:
   - title: Basic usage
-    command: my-skill "hello"
-SKILL
+    command: my-builtin "hello"
+BUILTIN
 
 # Script body — $1, $2, … hold positional args
 echo "$1"
 ```
 
-The `: <<'SKILL' … SKILL` heredoc is a no-op in sh, so the file is a valid executable script.
+The `: <<'BUILTIN' … BUILTIN` heredoc is a no-op in sh, so the file is a valid executable script.
 
 ## Shebang and interpreter
 
@@ -95,7 +95,7 @@ fi
 |-------|------|-------------|
 | `name` | string | Command name used in scripts |
 | `description` | string | Shown in help output and MCP manifests |
-| `category` | string | Groups the skill in listings |
+| `category` | string | Groups the builtin in listings |
 | `rate_limit` | int | Max calls per minute (0 = no limit) |
 | `args[].name` | string | Positional argument name |
 | `args[].description` | string | Argument description |
@@ -113,7 +113,7 @@ fi
 
 ```sh
 #!/bin/sh
-: <<'SKILL'
+: <<'BUILTIN'
 name: wrap
 description: Wraps each stdin line between a prefix and a suffix
 category: text
@@ -133,7 +133,7 @@ examples:
     command: echo "hello" | wrap
   - title: Custom delimiters
     command: printf 'a\nb\nc\n' | wrap --prefix="<" --suffix=">"
-SKILL
+BUILTIN
 
 while IFS= read -r line; do
     printf '%s%s%s\n' "$LEASH_FLAG_PREFIX" "$line" "$LEASH_FLAG_SUFFIX"

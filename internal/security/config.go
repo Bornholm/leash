@@ -72,8 +72,8 @@ type PolicyConfig struct {
 		MaxSubshells         int      `yaml:"max_subshells"`
 	} `yaml:"execution"`
 	RateLimits struct {
-		Global   RateSpec            `yaml:"global"`
-		PerSkill map[string]RateSpec `yaml:"per_skill"`
+		Global      RateSpec            `yaml:"global"`
+		PerBuiltin map[string]RateSpec `yaml:"per_builtin"`
 	} `yaml:"rate_limits"`
 	AllowedBinaries []string `yaml:"allowed_binaries"`
 	BlockedPatterns []string `yaml:"blocked_patterns"`
@@ -82,10 +82,10 @@ type PolicyConfig struct {
 		Static      map[string]string `yaml:"static"`
 		Passthrough []string          `yaml:"passthrough"`
 	} `yaml:"environment"`
-	Skills struct {
+	Builtins struct {
 		Enabled             []string `yaml:"enabled"`
 		RequireConfirmation []string `yaml:"require_confirmation"`
-	} `yaml:"skills"`
+	} `yaml:"builtins"`
 	MCPServers []MCPServerConfig `yaml:"mcp_servers"`
 	Sandbox    sandbox.Config    `yaml:"sandbox"`
 }

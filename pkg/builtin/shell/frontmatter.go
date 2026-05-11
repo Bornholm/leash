@@ -40,27 +40,19 @@ type exampleYAML struct {
 	Command string `yaml:"command"`
 }
 
-// heredocOpenRe correspond aux variantes de la ligne d'ouverture du heredoc :
-//
-//	: <<'SKILL', : << 'SKILL', :<<'SKILL', :<< SKILL, etc.
-var heredocOpenRe = regexp.MustCompile(`(?m)^:?\s*<<\s*'?SKILL'?\s*$`)
+var heredocOpenRe = regexp.MustCompile(`(?m)^:?\s*<<\s*'?BUILTIN'?\s*$`)
 
-// parseFrontmatter extrait le bloc de métadonnées YAML du heredoc : <<'SKILL' ... SKILL
-// présent dans un script shell. Si aucun bloc n'est trouvé, les métadonnées sont vides.
 func parseFrontmatter(src []byte) (frontmatterYAML, error) {
 	loc := heredocOpenRe.FindIndex(src)
 	if loc == nil {
 		return frontmatterYAML{}, nil
 	}
 
-	// Le contenu YAML commence après la ligne d'ouverture (après le \n).
 	afterOpen := src[loc[1]:]
 	if len(afterOpen) > 0 && afterOpen[0] == '\n' {
 		afterOpen = afterOpen[1:]
 	}
 
-	// Chercher la ligne de fermeture : "SKILL" seul en début de ligne.
-	// On cherche "\nSKILL\n" ou "\nSKILL" en fin de fichier.
 	endIdx := -1
 	pos := 0
 	for pos < len(afterOpen) {
@@ -71,7 +63,7 @@ func parseFrontmatter(src []byte) (frontmatterYAML, error) {
 		} else {
 			line = afterOpen[pos : pos+nl]
 		}
-		if bytes.Equal(bytes.TrimRight(line, "\r"), []byte("SKILL")) {
+		if bytes.Equal(bytes.TrimRight(line, "\r"), []byte("BUILTIN")) {
 			endIdx = pos
 			break
 		}
@@ -81,7 +73,7 @@ func parseFrontmatter(src []byte) (frontmatterYAML, error) {
 		pos += nl + 1
 	}
 	if endIdx == -1 {
-		return frontmatterYAML{}, fmt.Errorf("frontmatter: closing SKILL marker not found")
+		return frontmatterYAML{}, fmt.Errorf("frontmatter: closing BUILTIN marker not found")
 	}
 
 	yamlContent := afterOpen[:endIdx]
@@ -94,11 +86,6 @@ func parseFrontmatter(src []byte) (frontmatterYAML, error) {
 	return meta, nil
 }
 
-// parseShebang extrait le chemin de l'interpréteur depuis la première ligne d'un script.
-// Exemples :
-//   - "#!/bin/bash"     → "bash" (via exec.LookPath si path absolu)
-//   - "#!/usr/bin/env zsh" → "zsh"
-//   - pas de shebang    → "sh"
 func parseShebang(src []byte) string {
 	firstLine, _, _ := bytes.Cut(src, []byte("\n"))
 	line := strings.TrimSpace(string(firstLine))
@@ -108,7 +95,6 @@ func parseShebang(src []byte) string {
 	interp := strings.TrimPrefix(line, "#!")
 	interp = strings.TrimSpace(interp)
 
-	// Gérer "#!/usr/bin/env bash" → prendre le deuxième token.
 	parts := strings.Fields(interp)
 	if len(parts) == 0 {
 		return "sh"
@@ -116,7 +102,6 @@ func parseShebang(src []byte) string {
 	if strings.HasSuffix(parts[0], "/env") && len(parts) > 1 {
 		return parts[1]
 	}
-	// Retourner uniquement le basename de l'interpréteur.
 	p := parts[0]
 	if idx := strings.LastIndex(p, "/"); idx >= 0 {
 		p = p[idx+1:]

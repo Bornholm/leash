@@ -9,21 +9,21 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bornholm/leash/pkg/skill"
-	skillshell "github.com/bornholm/leash/pkg/skill/shell"
+	"github.com/bornholm/leash/pkg/builtin"
+	builtinShell "github.com/bornholm/leash/pkg/builtin/shell"
 )
 
 func TestLoadScript_Basic(t *testing.T) {
 	src := []byte(`#!/bin/sh
-: <<'SKILL'
+: <<'BUILTIN'
 name: upper
 description: Converts stdin to uppercase
 category: text
-SKILL
+BUILTIN
 
 tr 'a-z' 'A-Z'
 `)
-	sk, err := skillshell.LoadScript(src)
+	sk, err := builtinShell.LoadScript(src)
 	if err != nil {
 		t.Fatalf("LoadScript: %v", err)
 	}
@@ -40,22 +40,22 @@ tr 'a-z' 'A-Z'
 
 func TestLoadScript_StdinAndStdout(t *testing.T) {
 	src := []byte(`#!/bin/sh
-: <<'SKILL'
+: <<'BUILTIN'
 name: echo_lines
 description: Echoes stdin lines
-SKILL
+BUILTIN
 
 while IFS= read -r line; do
     printf '%s\n' "$line"
 done
 `)
-	sk, err := skillshell.LoadScript(src)
+	sk, err := builtinShell.LoadScript(src)
 	if err != nil {
 		t.Fatalf("LoadScript: %v", err)
 	}
 
 	var stdout strings.Builder
-	call := &skill.Call{
+	call := &builtin.Call{
 		Args:   []string{},
 		Flags:  map[string]string{},
 		Stdin:  strings.NewReader("hello\nworld\n"),
@@ -77,18 +77,18 @@ done
 
 func TestLoadScript_Args(t *testing.T) {
 	src := []byte(`#!/bin/sh
-: <<'SKILL'
+: <<'BUILTIN'
 name: greet
 description: Greets a person
 args:
   - name: name
     description: Name to greet
     required: true
-SKILL
+BUILTIN
 
 printf 'Hello, %s!\n' "$1"
 `)
-	sk, err := skillshell.LoadScript(src)
+	sk, err := builtinShell.LoadScript(src)
 	if err != nil {
 		t.Fatalf("LoadScript: %v", err)
 	}
@@ -98,7 +98,7 @@ printf 'Hello, %s!\n' "$1"
 	}
 
 	var stdout strings.Builder
-	call := &skill.Call{
+	call := &builtin.Call{
 		Args:   []string{"Alice"},
 		Flags:  map[string]string{},
 		Stdin:  strings.NewReader(""),
@@ -120,7 +120,7 @@ printf 'Hello, %s!\n' "$1"
 
 func TestLoadScript_Flags(t *testing.T) {
 	src := []byte(`#!/bin/sh
-: <<'SKILL'
+: <<'BUILTIN'
 name: prefixed
 description: Adds a prefix
 flags:
@@ -128,13 +128,13 @@ flags:
     short: p
     default: ""
     description: Prefix to add
-SKILL
+BUILTIN
 
 while IFS= read -r line; do
     printf '%s%s\n' "$LEASH_FLAG_PREFIX" "$line"
 done
 `)
-	sk, err := skillshell.LoadScript(src)
+	sk, err := builtinShell.LoadScript(src)
 	if err != nil {
 		t.Fatalf("LoadScript: %v", err)
 	}
@@ -144,7 +144,7 @@ done
 	}
 
 	var stdout strings.Builder
-	call := &skill.Call{
+	call := &builtin.Call{
 		Args:   []string{},
 		Flags:  map[string]string{"prefix": ">> "},
 		Stdin:  strings.NewReader("hello\n"),
@@ -166,19 +166,19 @@ done
 
 func TestLoadScript_ExitCode(t *testing.T) {
 	src := []byte(`#!/bin/sh
-: <<'SKILL'
-name: fail_skill
+: <<'BUILTIN'
+name: fail_builtin
 description: Always fails
-SKILL
+BUILTIN
 
 exit 42
 `)
-	sk, err := skillshell.LoadScript(src)
+	sk, err := builtinShell.LoadScript(src)
 	if err != nil {
 		t.Fatalf("LoadScript: %v", err)
 	}
 
-	call := &skill.Call{
+	call := &builtin.Call{
 		Args:   []string{},
 		Flags:  map[string]string{},
 		Stdin:  strings.NewReader(""),
@@ -191,7 +191,7 @@ exit 42
 	if err == nil {
 		t.Fatal("expected ExitError, got nil")
 	}
-	var exitErr skill.ExitError
+	var exitErr builtin.ExitError
 	if !strings.Contains(err.Error(), "42") {
 		t.Errorf("err = %v, want ExitError with code 42 (got %T)", err, exitErr)
 	}
@@ -199,20 +199,20 @@ exit 42
 
 func TestLoadScript_Stderr(t *testing.T) {
 	src := []byte(`#!/bin/sh
-: <<'SKILL'
-name: stderr_skill
+: <<'BUILTIN'
+name: stderr_builtin
 description: Writes to stderr
-SKILL
+BUILTIN
 
 printf 'error message\n' >&2
 `)
-	sk, err := skillshell.LoadScript(src)
+	sk, err := builtinShell.LoadScript(src)
 	if err != nil {
 		t.Fatalf("LoadScript: %v", err)
 	}
 
 	var stderr strings.Builder
-	call := &skill.Call{
+	call := &builtin.Call{
 		Args:   []string{},
 		Flags:  map[string]string{},
 		Stdin:  strings.NewReader(""),
@@ -234,7 +234,7 @@ func TestLoadScript_NoFrontmatterName_Error(t *testing.T) {
 	src := []byte(`#!/bin/sh
 printf 'hello\n'
 `)
-	_, err := skillshell.LoadScript(src)
+	_, err := builtinShell.LoadScript(src)
 	if err == nil {
 		t.Fatal("expected error for script without frontmatter name, got nil")
 	}
@@ -245,14 +245,14 @@ func TestLoadScript_HeredocVariants(t *testing.T) {
 		name string
 		src  []byte
 	}{
-		{"quoted", []byte("#!/bin/sh\n: <<'SKILL'\nname: v1\nSKILL\nprintf ok\n")},
-		{"space-quoted", []byte("#!/bin/sh\n: << 'SKILL'\nname: v2\nSKILL\nprintf ok\n")},
-		{"unquoted", []byte("#!/bin/sh\n: <<SKILL\nname: v3\nSKILL\nprintf ok\n")},
-		{"space-unquoted", []byte("#!/bin/sh\n: << SKILL\nname: v4\nSKILL\nprintf ok\n")},
+		{"quoted", []byte("#!/bin/sh\n: <<'BUILTIN'\nname: v1\nBUILTIN\nprintf ok\n")},
+		{"space-quoted", []byte("#!/bin/sh\n: << 'BUILTIN'\nname: v2\nBUILTIN\nprintf ok\n")},
+		{"unquoted", []byte("#!/bin/sh\n: <<BUILTIN\nname: v3\nBUILTIN\nprintf ok\n")},
+		{"space-unquoted", []byte("#!/bin/sh\n: << BUILTIN\nname: v4\nBUILTIN\nprintf ok\n")},
 	}
 	for _, tt := range variants {
 		t.Run(tt.name, func(t *testing.T) {
-			sk, err := skillshell.LoadScript(tt.src)
+			sk, err := builtinShell.LoadScript(tt.src)
 			if err != nil {
 				t.Fatalf("LoadScript: %v", err)
 			}
@@ -264,27 +264,26 @@ func TestLoadScript_HeredocVariants(t *testing.T) {
 }
 
 func TestLoadScript_BashShebang(t *testing.T) {
-	// Teste que le shebang bash est bien utilisé (syntaxe bash-spécifique).
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("bash not available")
 	}
 	src := []byte(`#!/bin/bash
-: <<'SKILL'
+: <<'BUILTIN'
 name: bash_upper
 description: Uppercase via bash
-SKILL
+BUILTIN
 
 while IFS= read -r line; do
     printf '%s\n' "${line^^}"
 done
 `)
-	sk, err := skillshell.LoadScript(src)
+	sk, err := builtinShell.LoadScript(src)
 	if err != nil {
 		t.Fatalf("LoadScript: %v", err)
 	}
 
 	var stdout strings.Builder
-	call := &skill.Call{
+	call := &builtin.Call{
 		Args:   []string{},
 		Flags:  map[string]string{},
 		Stdin:  strings.NewReader("hello\n"),
@@ -304,22 +303,22 @@ done
 
 func TestLoadScript_ContextCancel(t *testing.T) {
 	src := []byte(`#!/bin/sh
-: <<'SKILL'
-name: sleep_skill
+: <<'BUILTIN'
+name: sleep_builtin
 description: Sleeps forever
-SKILL
+BUILTIN
 
 sleep 60
 `)
-	sk, err := skillshell.LoadScript(src)
+	sk, err := builtinShell.LoadScript(src)
 	if err != nil {
 		t.Fatalf("LoadScript: %v", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // Annuler immédiatement.
+	cancel()
 
-	call := &skill.Call{
+	call := &builtin.Call{
 		Args:   []string{},
 		Flags:  map[string]string{},
 		Stdin:  strings.NewReader(""),
@@ -337,8 +336,8 @@ sleep 60
 func TestLoadDir(t *testing.T) {
 	dir := t.TempDir()
 
-	script1 := []byte("#!/bin/sh\n: <<'SKILL'\nname: skill_one\ndescription: First\nSKILL\nprintf one\n")
-	script2 := []byte("#!/bin/sh\n: <<'SKILL'\nname: skill_two\ndescription: Second\nSKILL\nprintf two\n")
+	script1 := []byte("#!/bin/sh\n: <<'BUILTIN'\nname: builtin_one\ndescription: First\nBUILTIN\nprintf one\n")
+	script2 := []byte("#!/bin/sh\n: <<'BUILTIN'\nname: builtin_two\ndescription: Second\nBUILTIN\nprintf two\n")
 
 	if err := os.WriteFile(filepath.Join(dir, "one.sh"), script1, 0o644); err != nil {
 		t.Fatal(err)
@@ -346,45 +345,43 @@ func TestLoadDir(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "two.sh"), script2, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// Fichier non-.sh : doit être ignoré.
 	if err := os.WriteFile(filepath.Join(dir, "ignore.txt"), []byte("ignored"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	skills, err := skillshell.LoadDir(dir)
+	builtins, err := builtinShell.LoadDir(dir)
 	if err != nil {
 		t.Fatalf("LoadDir: %v", err)
 	}
-	if len(skills) != 2 {
-		t.Errorf("len(skills) = %d, want 2", len(skills))
+	if len(builtins) != 2 {
+		t.Errorf("len(builtins) = %d, want 2", len(builtins))
 	}
 
 	names := map[string]bool{}
-	for _, sk := range skills {
+	for _, sk := range builtins {
 		names[sk.Name] = true
 	}
-	if !names["skill_one"] || !names["skill_two"] {
-		t.Errorf("unexpected skill names: %v", names)
+	if !names["builtin_one"] || !names["builtin_two"] {
+		t.Errorf("unexpected builtin names: %v", names)
 	}
 }
 
 func TestLoadDir_FallbackName(t *testing.T) {
 	dir := t.TempDir()
 
-	// Script sans frontmatter → fallback sur le nom du fichier.
 	src := []byte("#!/bin/sh\nprintf hello\n")
 	if err := os.WriteFile(filepath.Join(dir, "my_tool.sh"), src, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	skills, err := skillshell.LoadDir(dir)
+	builtins, err := builtinShell.LoadDir(dir)
 	if err != nil {
 		t.Fatalf("LoadDir: %v", err)
 	}
-	if len(skills) != 1 {
-		t.Fatalf("len(skills) = %d, want 1", len(skills))
+	if len(builtins) != 1 {
+		t.Fatalf("len(builtins) = %d, want 1", len(builtins))
 	}
-	if skills[0].Name != "my_tool" {
-		t.Errorf("Name = %q, want %q", skills[0].Name, "my_tool")
+	if builtins[0].Name != "my_tool" {
+		t.Errorf("Name = %q, want %q", builtins[0].Name, "my_tool")
 	}
 }

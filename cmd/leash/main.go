@@ -14,9 +14,9 @@ import (
 	"github.com/bornholm/leash/internal/security/sandbox"
 	mcptransport "github.com/bornholm/leash/internal/transport/mcp"
 	repltransport "github.com/bornholm/leash/internal/transport/repl"
-	"github.com/bornholm/leash/pkg/skill"
-	skillshell "github.com/bornholm/leash/pkg/skill/shell"
-	skilltengo "github.com/bornholm/leash/pkg/skill/tengo"
+	"github.com/bornholm/leash/pkg/builtin"
+	builtinShell "github.com/bornholm/leash/pkg/builtin/shell"
+	builtinTengo "github.com/bornholm/leash/pkg/builtin/tengo"
 	"github.com/spf13/cobra"
 )
 
@@ -31,8 +31,8 @@ func main() {
 
 var policyFile string
 var auditLogFile string
-var tengoSkillDirs []string
-var shellSkillDirs []string
+var tengoBuiltinDirs []string
+var shellBuiltinDirs []string
 
 var rootCmd = &cobra.Command{
 	Use:   "leash",
@@ -44,8 +44,8 @@ func init() {
 		envOr("LEASH_POLICY", "policies/default.yaml"), "Fichier de politique YAML")
 	rootCmd.PersistentFlags().StringVarP(&auditLogFile, "audit-log", "A",
 		envOr("LEASH_AUDIT_LOG", ""), "Fichier de destination de l'audit log JSON (stderr si vide)")
-	rootCmd.PersistentFlags().StringArrayVar(&tengoSkillDirs, "tengo-skills", nil, "Répertoire(s) de skills Tengo (*.tengo)")
-	rootCmd.PersistentFlags().StringArrayVar(&shellSkillDirs, "shell-skills", nil, "Répertoire(s) de skills shell (*.sh)")
+	rootCmd.PersistentFlags().StringArrayVar(&tengoBuiltinDirs, "tengo-builtins", nil, "Répertoire(s) de builtins Tengo (*.tengo)")
+	rootCmd.PersistentFlags().StringArrayVar(&shellBuiltinDirs, "shell-builtins", nil, "Répertoire(s) de builtins shell (*.sh)")
 
 	rootCmd.AddCommand(replCmd, mcpCmd, execCmd)
 	mcpCmd.AddCommand(mcpStdioCmd)
@@ -157,30 +157,30 @@ func buildEngine(ctx context.Context, polFile, auditLog string) (engine.Engine, 
 
 	reg := registry.New()
 
-	for _, dir := range tengoSkillDirs {
-		skills, err := skilltengo.LoadDir(dir)
+	for _, dir := range tengoBuiltinDirs {
+		builtins, err := builtinTengo.LoadDir(dir)
 		if err != nil {
 			auditCloser()
-			return nil, nil, fmt.Errorf("chargement des skills Tengo depuis %q : %w", dir, err)
+			return nil, nil, fmt.Errorf("chargement des builtins Tengo depuis %q : %w", dir, err)
 		}
-		for _, sk := range skills {
+		for _, sk := range builtins {
 			if err := reg.Register(sk); err != nil {
 				auditCloser()
-				return nil, nil, fmt.Errorf("enregistrement du skill Tengo %q : %w", sk.Name, err)
+				return nil, nil, fmt.Errorf("enregistrement du builtin Tengo %q : %w", sk.Name, err)
 			}
 		}
 	}
 
-	for _, dir := range shellSkillDirs {
-		skills, err := skillshell.LoadDir(dir)
+	for _, dir := range shellBuiltinDirs {
+		builtins, err := builtinShell.LoadDir(dir)
 		if err != nil {
 			auditCloser()
-			return nil, nil, fmt.Errorf("chargement des skills shell depuis %q : %w", dir, err)
+			return nil, nil, fmt.Errorf("chargement des builtins shell depuis %q : %w", dir, err)
 		}
-		for _, sk := range skills {
+		for _, sk := range builtins {
 			if err := reg.Register(sk); err != nil {
 				auditCloser()
-				return nil, nil, fmt.Errorf("enregistrement du skill shell %q : %w", sk.Name, err)
+				return nil, nil, fmt.Errorf("enregistrement du builtin shell %q : %w", sk.Name, err)
 			}
 		}
 	}
@@ -208,17 +208,17 @@ func buildEngine(ctx context.Context, polFile, auditLog string) (engine.Engine, 
 
 	eng := engine.New(pol, reg, auditor, rl, sb)
 
-	helpSkill := skill.New("leash-help").
+	helpBuiltin := builtin.New("leash-help").
 		Description("List all available shell commands with their usage and flags.").
 		Example("List all commands", "leash-help").
-		Handle(func(ctx context.Context, c *skill.Call) error {
+		Handle(func(ctx context.Context, c *builtin.Call) error {
 			fmt.Fprint(c.Stdout, reg.GenerateManifest())
 			return nil
 		})
 
-	if err := reg.Register(helpSkill); err != nil {
+	if err := reg.Register(helpBuiltin); err != nil {
 		cleanup()
-		return nil, nil, fmt.Errorf("enregistrement du skill help : %w", err)
+		return nil, nil, fmt.Errorf("enregistrement du builtin help : %w", err)
 	}
 
 	return eng, cleanup, nil

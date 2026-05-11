@@ -1,7 +1,7 @@
-// Exemple shell — skills dynamiques définis via des scripts shell.
+// Exemple shell — builtins dynamiques définis via des scripts shell.
 //
 // Cet exemple montre comment :
-//   - charger des skills depuis un répertoire de scripts .sh
+//   - charger des builtins depuis un répertoire de scripts .sh
 //   - utiliser des flags avec validation regexp
 //   - observer le comportement en cas d'erreur de validation
 //
@@ -21,12 +21,12 @@ import (
 func main() {
 	ctx := context.Background()
 
-	skillsDir := "examples/shell/skills"
+	builtinsDir := "examples/shell/builtins"
 
 	eng, cleanup, err := leash.New(ctx,
 		leash.WithMaxDuration(10*time.Second),
 		leash.WithAllowedBinaries("printf", "tr"),
-		leash.WithShellSkillDir(skillsDir),
+		leash.WithShellBuiltinDir(builtinsDir),
 	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "erreur création engine: %v\n", err)

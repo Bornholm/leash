@@ -6,7 +6,7 @@ execution:
 
 rate_limits:
   global: 100/minute
-  per_skill: {}
+  per_builtin: {}
 
 allowed_binaries:
   - grep
@@ -43,8 +43,8 @@ environment:
   # Utile par exemple pour SSH_AUTH_SOCK (agent SSH) ou TERM.
   passthrough: []
 
-skills:
-  enabled: []          # vide = tous les tools MCP enregistrés sont autorisés
+builtins:
+  enabled: []          # vide = tous les builtins enregistrés sont autorisés
   require_confirmation: []
 
 # Exemple de configuration de serveurs MCP externes.

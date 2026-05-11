@@ -8,12 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bornholm/leash/pkg/skill"
-	skilltengo "github.com/bornholm/leash/pkg/skill/tengo"
+	"github.com/bornholm/leash/pkg/builtin"
+	builtinTengo "github.com/bornholm/leash/pkg/builtin/tengo"
 )
 
 func TestLoadScript_Basic(t *testing.T) {
-	src := []byte(`/* skill
+	src := []byte(`/* builtin
 name: upper
 description: Converts stdin to uppercase
 category: text
@@ -26,7 +26,7 @@ for {
     write(text.to_upper(line) + "\n")
 }
 `)
-	sk, err := skilltengo.LoadScript(src)
+	sk, err := builtinTengo.LoadScript(src)
 	if err != nil {
 		t.Fatalf("LoadScript: %v", err)
 	}
@@ -42,8 +42,8 @@ for {
 }
 
 func TestLoadScript_StdinAndWrite(t *testing.T) {
-	src := []byte(`/* skill
-name: echo_skill
+	src := []byte(`/* builtin
+name: echo_builtin
 description: Echoes stdin lines
 */
 
@@ -53,7 +53,7 @@ for {
     write(line + "\n")
 }
 `)
-	sk, err := skilltengo.LoadScript(src)
+	sk, err := builtinTengo.LoadScript(src)
 	if err != nil {
 		t.Fatalf("LoadScript: %v", err)
 	}
@@ -62,7 +62,7 @@ for {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	call := &skill.Call{
+	call := &builtin.Call{
 		Args:   []string{},
 		Flags:  map[string]string{},
 		Stdin:  stdin,
@@ -83,8 +83,7 @@ for {
 }
 
 func TestLoadScript_StdinEmptyLinesPreserved(t *testing.T) {
-	// stdin() should return "" for blank lines and undefined only for EOF.
-	src := []byte(`/* skill
+	src := []byte(`/* builtin
 name: echo_blank
 description: Echoes stdin preserving blank lines
 */
@@ -95,7 +94,7 @@ for {
     write(line + "\n")
 }
 `)
-	sk, err := skilltengo.LoadScript(src)
+	sk, err := builtinTengo.LoadScript(src)
 	if err != nil {
 		t.Fatalf("LoadScript: %v", err)
 	}
@@ -103,7 +102,7 @@ for {
 	stdinContent := strings.NewReader("first\n\nsecond\n\nthird\n")
 	var stdout strings.Builder
 
-	call := &skill.Call{
+	call := &builtin.Call{
 		Args:   []string{},
 		Flags:  map[string]string{},
 		Stdin:  stdinContent,
@@ -124,7 +123,7 @@ for {
 }
 
 func TestLoadScript_ArgsAndFlags(t *testing.T) {
-	src := []byte(`/* skill
+	src := []byte(`/* builtin
 name: greet
 description: Greets a person
 args:
@@ -140,7 +139,7 @@ flags:
 
 write(flags["prefix"] + ", " + args[0] + "!\n")
 `)
-	sk, err := skilltengo.LoadScript(src)
+	sk, err := builtinTengo.LoadScript(src)
 	if err != nil {
 		t.Fatalf("LoadScript: %v", err)
 	}
@@ -153,7 +152,7 @@ write(flags["prefix"] + ", " + args[0] + "!\n")
 	}
 
 	var stdout strings.Builder
-	call := &skill.Call{
+	call := &builtin.Call{
 		Args:   []string{"Alice"},
 		Flags:  map[string]string{"prefix": "Bonjour"},
 		Stdin:  strings.NewReader(""),
@@ -174,19 +173,19 @@ write(flags["prefix"] + ", " + args[0] + "!\n")
 }
 
 func TestLoadScript_ExitCode(t *testing.T) {
-	src := []byte(`/* skill
-name: fail_skill
+	src := []byte(`/* builtin
+name: fail_builtin
 description: Always fails
 */
 
 exit_code = 42
 `)
-	sk, err := skilltengo.LoadScript(src)
+	sk, err := builtinTengo.LoadScript(src)
 	if err != nil {
 		t.Fatalf("LoadScript: %v", err)
 	}
 
-	call := &skill.Call{
+	call := &builtin.Call{
 		Args:   []string{},
 		Flags:  map[string]string{},
 		Stdin:  strings.NewReader(""),
@@ -196,31 +195,29 @@ exit_code = 42
 	}
 
 	err = sk.Handler(context.Background(), call)
-	var exitErr skill.ExitError
 	if err == nil {
 		t.Fatal("expected ExitError, got nil")
 	}
 	if !strings.Contains(err.Error(), "exit status 42") {
 		t.Errorf("err = %v, want ExitError with code 42", err)
 	}
-	_ = exitErr
 }
 
 func TestLoadScript_Ewrite(t *testing.T) {
-	src := []byte(`/* skill
-name: stderr_skill
+	src := []byte(`/* builtin
+name: stderr_builtin
 description: Writes to stderr
 */
 
 ewrite("error message\n")
 `)
-	sk, err := skilltengo.LoadScript(src)
+	sk, err := builtinTengo.LoadScript(src)
 	if err != nil {
 		t.Fatalf("LoadScript: %v", err)
 	}
 
 	var stderr strings.Builder
-	call := &skill.Call{
+	call := &builtin.Call{
 		Args:   []string{},
 		Flags:  map[string]string{},
 		Stdin:  strings.NewReader(""),
@@ -241,7 +238,7 @@ ewrite("error message\n")
 
 func TestLoadScript_NoFrontmatter_Error(t *testing.T) {
 	src := []byte(`write("hello\n")`)
-	_, err := skilltengo.LoadScript(src)
+	_, err := builtinTengo.LoadScript(src)
 	if err == nil {
 		t.Fatal("expected error for script without frontmatter name, got nil")
 	}
@@ -250,15 +247,15 @@ func TestLoadScript_NoFrontmatter_Error(t *testing.T) {
 func TestLoadDir(t *testing.T) {
 	dir := t.TempDir()
 
-	script1 := []byte(`/* skill
-name: skill_one
-description: First skill
+	script1 := []byte(`/* builtin
+name: builtin_one
+description: First builtin
 */
 write("one\n")
 `)
-	script2 := []byte(`/* skill
-name: skill_two
-description: Second skill
+	script2 := []byte(`/* builtin
+name: builtin_two
+description: Second builtin
 */
 write("two\n")
 `)
@@ -268,24 +265,23 @@ write("two\n")
 	if err := os.WriteFile(filepath.Join(dir, "two.tengo"), script2, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// Fichier non-.tengo : doit être ignoré
 	if err := os.WriteFile(filepath.Join(dir, "ignore.txt"), []byte("ignored"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	skills, err := skilltengo.LoadDir(dir)
+	builtins, err := builtinTengo.LoadDir(dir)
 	if err != nil {
 		t.Fatalf("LoadDir: %v", err)
 	}
-	if len(skills) != 2 {
-		t.Errorf("len(skills) = %d, want 2", len(skills))
+	if len(builtins) != 2 {
+		t.Errorf("len(builtins) = %d, want 2", len(builtins))
 	}
 
 	names := map[string]bool{}
-	for _, sk := range skills {
+	for _, sk := range builtins {
 		names[sk.Name] = true
 	}
-	if !names["skill_one"] || !names["skill_two"] {
+	if !names["builtin_one"] || !names["builtin_two"] {
 		t.Errorf("names = %v", names)
 	}
 }

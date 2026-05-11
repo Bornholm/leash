@@ -1,5 +1,5 @@
 #!/bin/sh
-: <<'SKILL'
+: <<'BUILTIN'
 name: wrap
 description: Wraps each stdin line between a prefix and a suffix
 category: text
@@ -19,7 +19,7 @@ examples:
     command: echo "hello" | wrap
   - title: Custom delimiters
     command: printf 'a\nb\nc\n' | wrap --prefix="<" --suffix=">"
-SKILL
+BUILTIN
 
 while IFS= read -r line; do
     printf '%s%s%s\n' "$LEASH_FLAG_PREFIX" "$line" "$LEASH_FLAG_SUFFIX"

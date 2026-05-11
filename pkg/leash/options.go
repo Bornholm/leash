@@ -7,9 +7,9 @@ import (
 
 	"github.com/bornholm/leash/internal/security"
 	"github.com/bornholm/leash/internal/security/sandbox"
-	"github.com/bornholm/leash/pkg/skill"
-	skillshell "github.com/bornholm/leash/pkg/skill/shell"
-	skilltengo "github.com/bornholm/leash/pkg/skill/tengo"
+	"github.com/bornholm/leash/pkg/builtin"
+	builtinShell "github.com/bornholm/leash/pkg/builtin/shell"
+	builtinTengo "github.com/bornholm/leash/pkg/builtin/tengo"
 )
 
 // Option est une fonction de configuration pour New().
@@ -47,7 +47,6 @@ func WithMaxSubshells(n int) Option {
 	}
 }
 
-// WithGlobalRateLimit définit la limite de débit globale (toutes commandes confondues).
 func WithGlobalRateLimit(count int, window time.Duration) Option {
 	return func(c *config) error {
 		c.globalRateLimit = rateSpec{count: count, window: window}
@@ -55,13 +54,12 @@ func WithGlobalRateLimit(count int, window time.Duration) Option {
 	}
 }
 
-// WithSkillRateLimit définit la limite de débit pour un skill spécifique.
-func WithSkillRateLimit(name string, count int, window time.Duration) Option {
+func WithBuiltinRateLimit(name string, count int, window time.Duration) Option {
 	return func(c *config) error {
-		if c.perSkillRates == nil {
-			c.perSkillRates = make(map[string]rateSpec)
+		if c.perBuiltinRates == nil {
+			c.perBuiltinRates = make(map[string]rateSpec)
 		}
-		c.perSkillRates[name] = rateSpec{count: count, window: window}
+		c.perBuiltinRates[name] = rateSpec{count: count, window: window}
 		return nil
 	}
 }
@@ -101,95 +99,82 @@ func WithEnvVar(key, value string) Option {
 	}
 }
 
-// WithEnabledSkills définit la liste blanche des skills autorisés (vide = tous autorisés).
-func WithEnabledSkills(skills ...string) Option {
+func WithEnabledBuiltins(builtins ...string) Option {
 	return func(c *config) error {
-		c.enabledSkills = skills
+		c.enabledBuiltins = builtins
 		return nil
 	}
 }
 
-// WithRequireConfirmation définit les skills nécessitant une confirmation explicite
-// (variable d'env CONFIRM_<SKILL>=yes).
-func WithRequireConfirmation(skills ...string) Option {
+func WithRequireConfirmation(builtins ...string) Option {
 	return func(c *config) error {
-		c.requireConfirmation = skills
+		c.requireConfirmation = builtins
 		return nil
 	}
 }
 
-// WithSkill enregistre un skill dans l'Engine au moment de la construction.
-func WithSkill(s *skill.Skill) Option {
+func WithBuiltin(b *builtin.Builtin) Option {
 	return func(c *config) error {
-		if s == nil {
-			return fmt.Errorf("leash: WithSkill: skill cannot be nil")
+		if b == nil {
+			return fmt.Errorf("leash: WithBuiltin: builtin cannot be nil")
 		}
-		c.skills = append(c.skills, s)
+		c.builtins = append(c.builtins, b)
 		return nil
 	}
 }
 
-// WithSkills enregistre plusieurs skills dans l'Engine.
-func WithSkills(skills ...*skill.Skill) Option {
+func WithBuiltins(builtins ...*builtin.Builtin) Option {
 	return func(c *config) error {
-		for _, s := range skills {
-			if s == nil {
-				return fmt.Errorf("leash: WithSkills: skill cannot be nil")
+		for _, b := range builtins {
+			if b == nil {
+				return fmt.Errorf("leash: WithBuiltins: builtin cannot be nil")
 			}
-			c.skills = append(c.skills, s)
+			c.builtins = append(c.builtins, b)
 		}
 		return nil
 	}
 }
 
-// WithTengoSkill compile un script Tengo et enregistre le skill résultant dans l'Engine.
-// src est le contenu complet du fichier (frontmatter YAML + corps du script).
-func WithTengoSkill(src []byte) Option {
+func WithTengoBuiltin(src []byte) Option {
 	return func(c *config) error {
-		sk, err := skilltengo.LoadScript(src)
+		sk, err := builtinTengo.LoadScript(src)
 		if err != nil {
-			return fmt.Errorf("leash: WithTengoSkill: %w", err)
+			return fmt.Errorf("leash: WithTengoBuiltin: %w", err)
 		}
-		c.skills = append(c.skills, sk)
+		c.builtins = append(c.builtins, sk)
 		return nil
 	}
 }
 
-// WithTengoSkillDir charge tous les fichiers *.tengo d'un répertoire comme skills Tengo.
-// Les erreurs de compilation de chaque fichier sont agrégées et retournées.
-func WithTengoSkillDir(dir string) Option {
+func WithTengoBuiltinDir(dir string) Option {
 	return func(c *config) error {
-		skills, err := skilltengo.LoadDir(dir)
+		builtins, err := builtinTengo.LoadDir(dir)
 		if err != nil {
-			return fmt.Errorf("leash: WithTengoSkillDir: %w", err)
+			return fmt.Errorf("leash: WithTengoBuiltinDir: %w", err)
 		}
-		c.skills = append(c.skills, skills...)
+		c.builtins = append(c.builtins, builtins...)
 		return nil
 	}
 }
 
-// WithShellSkill charge un script shell et enregistre le skill résultant dans l'Engine.
-// src est le contenu complet du fichier (frontmatter heredoc + corps du script).
-func WithShellSkill(src []byte) Option {
+func WithShellBuiltin(src []byte) Option {
 	return func(c *config) error {
-		sk, err := skillshell.LoadScript(src)
+		sk, err := builtinShell.LoadScript(src)
 		if err != nil {
-			return fmt.Errorf("leash: WithShellSkill: %w", err)
+			return fmt.Errorf("leash: WithShellBuiltin: %w", err)
 		}
-		c.skills = append(c.skills, sk)
+		c.builtins = append(c.builtins, sk)
 		return nil
 	}
 }
 
-// WithShellSkillDir charge tous les fichiers *.sh d'un répertoire comme skills shell.
-// Les erreurs de chaque fichier sont agrégées et retournées.
-func WithShellSkillDir(dir string) Option {
+func WithShellBuiltinDir(dir string) Option {
 	return func(c *config) error {
-		skills, err := skillshell.LoadDir(dir)
+		builtins, err := builtinShell.LoadDir(dir)
 		if err != nil {
-			return fmt.Errorf("leash: WithShellSkillDir: %w", err)
+			return fmt.Errorf("leash: WithShellBuiltinDir: %w", err)
 		}
-		c.skills = append(c.skills, skills...)
+		c.builtins = append(c.builtins, builtins...)
 		return nil
 	}
 }

@@ -30,11 +30,11 @@ echo 'echo hello | tr a-z A-Z' | ./leash --policy policies/default.yaml exec
 ### Dependency graph (import order)
 
 ```
-pkg/skill  ──────────────────────────────────────────┐
+pkg/builtin  ──────────────────────────────────────────┐
 internal/security  (+ audit_types.go)                │
-internal/registry  (imports pkg/skill)                │
-internal/engine    (imports security, registry, pkg/skill)
-skills/*           (import pkg/skill)
+internal/registry  (imports pkg/builtin)            │
+internal/engine    (imports security, registry, pkg/builtin)
+builtins/*        (import pkg/builtin)
 internal/transport/mcp   (imports engine)
 internal/transport/repl  (imports engine, registry)
 cmd/leash/main.go        (wires everything together)
@@ -57,33 +57,33 @@ Every script goes through this sequence in `Runner.ExecWithStreams`:
 
 Each command is resolved in priority order:
 
-1. Registered skill → `policy.CanExecuteSkill` → rate limit check → `skill.Handler`
+1. Registered builtin → `policy.CanExecuteBuiltin` → rate limit check → `builtin.Handler`
 2. Allowed binary (allowlist) → delegate to `next` (OS execution) + audit
 3. Everything else → blocked, `exit 127`
 
-**Critical**: `call.Stdout`/`call.Stderr` in skill handlers must be wired to `interp.HandlerCtx(ctx).Stdout`/`.Stderr`, not the Engine-level streams — otherwise shell pipes break.
+**Critical**: `call.Stdout`/`call.Stderr` in builtin handlers must be wired to `interp.HandlerCtx(ctx).Stdout`/`.Stderr`, not the Engine-level streams — otherwise shell pipes break.
 
 **Critical**: handlers must return `interp.ExitStatus(n)`, never `fmt.Errorf(...)`, for normal errors — returning a plain error causes mvdan to abort the entire script.
 
-### Adding a new skill
+### Adding a new builtin
 
-1. Create `skills/<category>/<name>.go`
+1. Create `builtins/<category>/<name>.go`
 2. Use the builder API:
    ```go
-   func NewMySkill() *skill.Skill {
-       return skill.New("my_skill").
+   func NewMyBuiltin() *builtin.Builtin {
+       return builtin.New("my_builtin").
            Description("...").
            Arg("input", "...", true).
            Flag("format", "f", "text", "Output format").
-           Handle(func(ctx context.Context, c *skill.Call) error {
+           Handle(func(ctx context.Context, c *builtin.Call) error {
                // c.Args[0], c.Flags["format"]
                // c.Stdin, c.Stdout, c.Stderr, c.Env("VAR")
-               // return skill.ExitError{Code: 1} for non-zero exit
+               // return builtin.ExitError{Code: 1} for non-zero exit
                return nil
            })
    }
    ```
-3. Register in `cmd/leash/main.go` `registerBuiltinSkills`
+3. Register in `cmd/leash/main.go` `registerBuiltinBuiltins`
 
 ### Policy files
 
@@ -92,12 +92,12 @@ Three presets in `policies/`: `default.yaml`, `restrictive.yaml`, `permissive.ya
 Key YAML fields:
 
 - `execution.max_duration`: go duration string (`30s`, `2m`)
-- `rate_limits.global` / `per_skill`: format `N/minute` or `N/second`
+- `rate_limits.global` / `per_builtin`: format `N/minute` or `N/second`
 - `allowed_binaries`: system binaries allowed to run; everything else is blocked
 - `blocked_patterns`: substring matches checked before parse (and `&` background jobs checked in AST)
 - `environment.static`: the _only_ env vars injected — host env is never inherited
-- `skills.enabled`: whitelist (empty list = all registered skills allowed)
-- `skills.require_confirmation`: skill names requiring `CONFIRM_<NAME>=yes` env var
+- `builtins.enabled`: whitelist (empty list = all registered builtins allowed)
+- `builtins.require_confirmation`: builtin names requiring `CONFIRM_<NAME>=yes` env var
 
 ### MCP transport (`internal/transport/mcp`)
 

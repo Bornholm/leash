@@ -84,9 +84,9 @@ func New(ctx context.Context, opts ...Option) (Engine, func(), error) {
 	}
 
 	reg := registry.New()
-	for _, sk := range cfg.skills {
+	for _, sk := range cfg.builtins {
 		if err := reg.Register(sk); err != nil {
-			return nil, nil, fmt.Errorf("leash: registering skill %q: %w", sk.Name, err)
+			return nil, nil, fmt.Errorf("leash: registering builtin %q: %w", sk.Name, err)
 		}
 	}
 

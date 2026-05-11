@@ -1,24 +1,24 @@
-# Skills — Tengo scripts
+# Builtins — Tengo scripts
 
-Skills can be written as [Tengo](https://github.com/d5/tengo) scripts (`.tengo` files) and loaded from a directory at engine startup. No Go compilation is required.
+Builtins can be written as [Tengo](https://github.com/d5/tengo) scripts (`.tengo` files) and loaded from a directory at engine startup. No Go compilation is required.
 
 ## Loading a directory
 
 ```go
 eng, cleanup, err := leash.New(ctx,
-    leash.WithTengoSkillDir("skills/"),
+    leash.WithTengoBuiltinDir("builtins/"),
 )
 ```
 
-Every `.tengo` file found in `skills/` is loaded as a skill. The skill name is taken from the frontmatter (see below); if absent, the filename without extension is used.
+Every `.tengo` file found in `builtins/` is loaded as a builtin. The builtin name is taken from the frontmatter (see below); if absent, the filename without extension is used.
 
 ## File structure
 
-A Tengo skill file is a plain Tengo script with an optional YAML frontmatter block at the top.
+A Tengo builtin file is a plain Tengo script with an optional YAML frontmatter block at the top.
 
 ```tengo
-/* skill
-name: my-skill
+/* builtin
+name: my-builtin
 description: Short description shown in help and MCP manifests
 category: text
 rate_limit: 10       # calls/minute (0 = unlimited)
@@ -35,7 +35,7 @@ flags:
     pattern: "^[-_.]$"
 examples:
   - title: Basic usage
-    command: my-skill "hello world"
+    command: my-builtin "hello world"
 */
 
 // Script body starts here
@@ -91,7 +91,7 @@ for {
 |-------|------|-------------|
 | `name` | string | Command name used in scripts |
 | `description` | string | Shown in help output and MCP manifests |
-| `category` | string | Groups the skill in listings |
+| `category` | string | Groups the builtin in listings |
 | `rate_limit` | int | Max calls per minute (0 = no limit) |
 | `args[].name` | string | Positional argument name |
 | `args[].description` | string | Argument description |
@@ -107,7 +107,7 @@ for {
 
 ## Module `http`
 
-The `http` module lets skills call remote HTTP services.
+The `http` module lets builtins call remote HTTP services.
 
 ```tengo
 http := import("http")
@@ -184,7 +184,7 @@ resp := http.request("PATCH", "https://api.example.com/users/1", `{"name":"bob"}
 ## Complete example
 
 ```tengo
-/* skill
+/* builtin
 name: slugify
 description: Converts a string to a URL-friendly slug
 category: text

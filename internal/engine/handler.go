@@ -16,7 +16,7 @@ import (
 	"github.com/bornholm/leash/internal/registry"
 	"github.com/bornholm/leash/internal/security"
 	"github.com/bornholm/leash/internal/security/sandbox"
-	"github.com/bornholm/leash/pkg/skill"
+	"github.com/bornholm/leash/pkg/builtin"
 )
 
 // NewExecHandler construit le middleware d'exécution pour mvdan.cc/sh/v3.
@@ -43,11 +43,11 @@ func NewExecHandler(
 			if sk, ok := reg.Get(name); ok {
 				// --help / -h : afficher l'aide sans exécuter le skill
 				if isHelpRequest(args[1:]) {
-					printSkillHelp(sk, hc.Stdout)
+					printBuiltinHelp(sk, hc.Stdout)
 					return nil
 				}
 
-				if err := pol.CanExecuteSkill(ctx, name, args[1:]); err != nil {
+				if err := pol.CanExecuteBuiltin(ctx, name, args[1:]); err != nil {
 					fmt.Fprintf(hc.Stderr, "leash: %s: %v\n", name, err)
 					return interp.ExitStatus(126)
 				}
@@ -59,7 +59,7 @@ func NewExecHandler(
 				key := recorder.Start(name, args[1:], true, sandbox.SandboxFromContext(ctx).Name())
 				call := buildCall(args[1:], sk.Flags, hc, pol.SafeEnvironment())
 
-				if err := skill.Validate(sk, call); err != nil {
+				if err := builtin.Validate(sk, call); err != nil {
 					fmt.Fprintf(hc.Stderr, "leash: %s: %v\n", name, err)
 					recorder.Finish(key, 1)
 					return interp.ExitStatus(1)
@@ -69,7 +69,7 @@ func NewExecHandler(
 
 				exitCode := 0
 				if err != nil {
-					if exitErr, ok := err.(skill.ExitError); ok {
+					if exitErr, ok := err.(builtin.ExitError); ok {
 						exitCode = exitErr.Code
 						err = nil
 					} else {
@@ -126,8 +126,7 @@ func isHelpRequest(args []string) bool {
 	return false
 }
 
-// printSkillHelp écrit l'aide formatée d'un skill sur w.
-func printSkillHelp(sk *skill.Skill, w io.Writer) {
+func printBuiltinHelp(sk *builtin.Builtin, w io.Writer) {
 	// Ligne d'usage
 	var usage strings.Builder
 	usage.WriteString(sk.Name)
@@ -184,16 +183,13 @@ func printSkillHelp(sk *skill.Skill, w io.Writer) {
 	}
 }
 
-// buildCall construit un skill.Call depuis les arguments et le contexte mvdan.
-// Les streams sont câblés sur les streams actifs du shell (pour que les pipes fonctionnent).
-func buildCall(args []string, flagDefs []skill.FlagDef, hc interp.HandlerContext, safeEnv map[string]string) *skill.Call {
-	positional, flags, err := skill.ParseFlags(flagDefs, args)
+func buildCall(args []string, flagDefs []builtin.FlagDef, hc interp.HandlerContext, safeEnv map[string]string) *builtin.Call {
+	positional, flags, err := builtin.ParseFlags(flagDefs, args)
 	if err != nil {
-		// En cas d'erreur de parsing, passer les args bruts comme positionnels
 		positional = args
 		flags = make(map[string]string)
 	}
-	return &skill.Call{
+	return &builtin.Call{
 		Args:    positional,
 		Flags:   flags,
 		Stdin:   hc.Stdin,

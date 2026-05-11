@@ -1,19 +1,13 @@
-package skill
+package builtin
 
 import (
 	"fmt"
 	"strings"
 )
 
-// ParseFlags sépare les arguments positionnels des flags --key=value, --key value, ou -k value.
-// Le shell (mvdan.cc/sh/v3) a déjà splité les arguments et résolu les guillemets.
 func ParseFlags(defs []FlagDef, rawArgs []string) (positional []string, flags map[string]string, err error) {
 	flags = make(map[string]string)
 
-	// Initialiser avec les valeurs par défaut (y compris les défauts vides)
-	// afin que tous les flags soient présents dans la map avec leur valeur par défaut.
-	// Cela garantit que dans les skills Tengo, `flags["key"]` retourne toujours
-	// une chaîne (éventuellement vide) et jamais `undefined`.
 	for _, def := range defs {
 		flags[def.Name] = def.Default
 	}

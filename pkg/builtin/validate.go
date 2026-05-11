@@ -1,14 +1,11 @@
-package skill
+package builtin
 
 import (
 	"fmt"
 	"regexp"
 )
 
-// Validate vérifie les valeurs des arguments et flags du Call contre les patterns
-// définis dans les ArgDef et FlagDef du skill. Retourne une erreur descriptive
-// dès la première violation, nil si tout est valide.
-func Validate(sk *Skill, call *Call) error {
+func Validate(sk *Builtin, call *Call) error {
 	for i, val := range call.Args {
 		if i >= len(sk.Args) {
 			break
@@ -19,7 +16,6 @@ func Validate(sk *Skill, call *Call) error {
 		}
 		re, err := regexp.Compile(def.Pattern)
 		if err != nil {
-			// Pattern invalide : ignoré silencieusement (déjà détecté au load time).
 			continue
 		}
 		if !re.MatchString(val) {

@@ -8,8 +8,6 @@ import (
 	tengosdk "github.com/d5/tengo/v2"
 )
 
-// makeWriteFn crée une UserFunction Tengo qui écrit sur w.
-// Signature dans les scripts : write(text)
 func makeWriteFn(w io.Writer) *tengosdk.UserFunction {
 	return &tengosdk.UserFunction{
 		Name: "write",
@@ -26,8 +24,6 @@ func makeWriteFn(w io.Writer) *tengosdk.UserFunction {
 	}
 }
 
-// makeEwriteFn crée une UserFunction Tengo qui écrit sur w (stderr).
-// Signature dans les scripts : ewrite(text)
 func makeEwriteFn(w io.Writer) *tengosdk.UserFunction {
 	return &tengosdk.UserFunction{
 		Name: "ewrite",
@@ -44,8 +40,6 @@ func makeEwriteFn(w io.Writer) *tengosdk.UserFunction {
 	}
 }
 
-// makeEnvFn crée une UserFunction Tengo qui lit une variable d'environnement.
-// Signature dans les scripts : env(key) -> string
 func makeEnvFn(envFn func(string) string) *tengosdk.UserFunction {
 	return &tengosdk.UserFunction{
 		Name: "env",
@@ -59,11 +53,6 @@ func makeEnvFn(envFn func(string) string) *tengosdk.UserFunction {
 	}
 }
 
-// makeStdinFn crée une UserFunction Tengo qui lit stdin ligne par ligne.
-// Le scanner est créé une fois pour toute la durée de vie du handler invoqué.
-// Signature dans les scripts : stdin() -> string | undefined
-// Retourne la ligne lue (sans \n), ou undefined à l'EOF.
-// Les lignes vides retournent "" (chaîne vide), pas undefined.
 func makeStdinFn(r io.Reader) *tengosdk.UserFunction {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)

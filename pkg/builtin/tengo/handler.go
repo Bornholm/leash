@@ -4,15 +4,13 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/bornholm/leash/pkg/skill"
-	"github.com/bornholm/leash/pkg/skill/tengo/modules"
+	"github.com/bornholm/leash/pkg/builtin"
+	"github.com/bornholm/leash/pkg/builtin/tengo/modules"
 	tengosdk "github.com/d5/tengo/v2"
 )
 
-// MakeHandler construit un skill.HandlerFunc à partir d'un script Tengo pré-compilé.
-// Chaque invocation clone le Compiled, injecte les données du Call, exécute et lit exit_code.
-func MakeHandler(skillName string, compiled *tengosdk.Compiled) skill.HandlerFunc {
-	return func(ctx context.Context, c *skill.Call) error {
+func MakeHandler(builtinName string, compiled *tengosdk.Compiled) builtin.HandlerFunc {
+	return func(ctx context.Context, c *builtin.Call) error {
 		clone := compiled.Clone()
 
 		tengoArgs := make([]tengosdk.Object, len(c.Args))
@@ -38,18 +36,18 @@ func MakeHandler(skillName string, compiled *tengosdk.Compiled) skill.HandlerFun
 
 		for name, val := range injections {
 			if err := clone.Set(name, val); err != nil {
-				return fmt.Errorf("tengo skill %q: inject %s: %w", skillName, name, err)
+				return fmt.Errorf("tengo builtin %q: inject %s: %w", builtinName, name, err)
 			}
 		}
 
 		if err := clone.RunContext(ctx); err != nil {
-			return fmt.Errorf("tengo skill %q: %w", skillName, err)
+			return fmt.Errorf("tengo builtin %q: %w", builtinName, err)
 		}
 
 		exitCodeVar := clone.Get("exit_code")
 		if !exitCodeVar.IsUndefined() {
 			if code := exitCodeVar.Int(); code != 0 {
-				return skill.ExitError{Code: code}
+				return builtin.ExitError{Code: code}
 			}
 		}
 

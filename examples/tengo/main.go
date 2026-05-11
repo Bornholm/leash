@@ -1,7 +1,7 @@
-// Exemple tengo — skills dynamiques définis via des scripts Tengo.
+// Exemple tengo — builtins dynamiques définis via des scripts Tengo.
 //
 // Cet exemple montre comment :
-//   - charger des skills depuis un répertoire de scripts .tengo
+//   - charger des builtins depuis un répertoire de scripts .tengo
 //   - utiliser des args et flags avec validation regexp
 //   - observer le comportement en cas d'erreur de validation
 //
@@ -21,12 +21,12 @@ import (
 func main() {
 	ctx := context.Background()
 
-	skillsDir := "examples/tengo/skills"
+	builtinsDir := "examples/tengo/builtins"
 
 	eng, cleanup, err := leash.New(ctx,
 		leash.WithMaxDuration(10*time.Second),
 		leash.WithAllowedBinaries("echo", "ls", "cat"),
-		leash.WithTengoSkillDir(skillsDir),
+		leash.WithTengoBuiltinDir(builtinsDir),
 	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "erreur création engine: %v\n", err)

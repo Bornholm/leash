@@ -20,14 +20,13 @@ func NewAuditRecorder() *AuditRecorder {
 	}
 }
 
-// Start enregistre le début d'une commande et retourne une clé pour Finish.
-func (r *AuditRecorder) Start(command string, args []string, isSkill bool, sandboxBackend string) string {
+func (r *AuditRecorder) Start(command string, args []string, isBuiltin bool, sandboxBackend string) string {
 	key := command + "@" + time.Now().String()
 	r.active[key] = &CommandRecord{
-		Command:        command,
-		Args:           args,
-		StartTime:      time.Now(),
-		IsSkill:        isSkill,
+		Command:         command,
+		Args:            args,
+		StartTime:       time.Now(),
+		IsBuiltin:       isBuiltin,
 		SandboxBackend: sandboxBackend,
 	}
 	return key
@@ -83,7 +82,7 @@ func (a *AuditLogger) Log(ctx context.Context, trail *AuditTrail) {
 			slog.Duration("duration", cmd.Duration),
 			slog.Int("exit_code", cmd.ExitCode),
 			slog.Bool("blocked", cmd.Blocked),
-			slog.Bool("is_skill", cmd.IsSkill),
+			slog.Bool("is_builtin", cmd.IsBuiltin),
 			slog.String("sandbox", cmd.SandboxBackend),
 		}
 		if cmd.Blocked {

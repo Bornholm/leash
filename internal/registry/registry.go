@@ -6,78 +6,71 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/bornholm/leash/pkg/skill"
+	"github.com/bornholm/leash/pkg/builtin"
 )
 
-// Registry est un registre thread-safe de skills.
 type Registry struct {
-	mu     sync.RWMutex
-	skills map[string]*skill.Skill
+	mu       sync.RWMutex
+	builtins map[string]*builtin.Builtin
 }
 
-// New crée un Registry vide.
 func New() *Registry {
-	return &Registry{skills: make(map[string]*skill.Skill)}
+	return &Registry{builtins: make(map[string]*builtin.Builtin)}
 }
 
-// Register enregistre un skill. Retourne une erreur si le nom est vide ou déjà pris.
-func (r *Registry) Register(sk *skill.Skill) error {
+func (r *Registry) Register(sk *builtin.Builtin) error {
 	if sk == nil {
-		return errors.New("skill cannot be nil")
+		return errors.New("builtin cannot be nil")
 	}
 	if sk.Name == "" {
-		return errors.New("skill name cannot be empty")
+		return errors.New("builtin name cannot be empty")
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, exists := r.skills[sk.Name]; exists {
-		return fmt.Errorf("skill %q already registered", sk.Name)
+	if _, exists := r.builtins[sk.Name]; exists {
+		return fmt.Errorf("builtin %q already registered", sk.Name)
 	}
-	r.skills[sk.Name] = sk
+	r.builtins[sk.Name] = sk
 	return nil
 }
 
-// Get retourne un skill par son nom.
-func (r *Registry) Get(name string) (*skill.Skill, bool) {
+func (r *Registry) Get(name string) (*builtin.Builtin, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	sk, ok := r.skills[name]
+	sk, ok := r.builtins[name]
 	return sk, ok
 }
 
-// ListNames retourne les noms de tous les skills enregistrés (ordre alphabétique).
 func (r *Registry) ListNames() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	names := make([]string, 0, len(r.skills))
-	for name := range r.skills {
+	names := make([]string, 0, len(r.builtins))
+	for name := range r.builtins {
 		names = append(names, name)
 	}
 	return names
 }
 
-// ForEach appelle fn pour chaque skill enregistré.
-func (r *Registry) ForEach(fn func(*skill.Skill)) {
+func (r *Registry) ForEach(fn func(*builtin.Builtin)) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	for _, sk := range r.skills {
+	for _, sk := range r.builtins {
 		fn(sk)
 	}
 }
 
-// GenerateManifest produit la documentation Markdown à injecter dans le system prompt LLM.
 func (r *Registry) GenerateManifest() string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	if len(r.skills) == 0 {
+	if len(r.builtins) == 0 {
 		return "No shell commands are available.\n"
 	}
 
 	var sb strings.Builder
 	sb.WriteString("# Available Shell Commands\n\nThese are shell commands invoked via execute_shell, e.g.: execute_shell {\"script\": \"<command> [args]\"}\n\n")
 
-	for _, sk := range r.skills {
+	for _, sk := range r.builtins {
 		sb.WriteString("## " + sk.Name + "\n\n")
 		if sk.Description != "" {
 			sb.WriteString(sk.Description + "\n\n")

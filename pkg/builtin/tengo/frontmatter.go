@@ -38,12 +38,8 @@ type exampleYAML struct {
 	Command string `yaml:"command"`
 }
 
-// parseFrontmatter extrait le bloc de métadonnées YAML d'un commentaire /* skill ... */
-// et retourne les métadonnées ainsi que le corps du script sans le commentaire.
-// Si aucun bloc de frontmatter n'est trouvé, les métadonnées sont vides et le corps
-// est le script entier.
 func parseFrontmatter(src []byte) (frontmatterYAML, []byte, error) {
-	prefix := []byte("/* skill\n")
+	prefix := []byte("/* builtin\n")
 	suffix := []byte("*/")
 
 	start := bytes.Index(src, prefix)

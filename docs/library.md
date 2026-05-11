@@ -6,12 +6,10 @@ LeaSH can be embedded directly in Go applications via the `pkg/leash` package.
 go get github.com/bornholm/leash
 ```
 
-## Creating an engine
-
 ```go
 import (
     "github.com/bornholm/leash/pkg/leash"
-    "github.com/bornholm/leash/pkg/skill"
+    "github.com/bornholm/leash/pkg/builtin"
 )
 
 eng, cleanup, err := leash.New(ctx,
@@ -31,7 +29,7 @@ defer cleanup()
 ```go
 eng, cleanup, err := leash.New(ctx,
     leash.WithPolicyFile("policies/restrictive.yaml"),
-    leash.WithEnvVar("MY_VAR", "value"), // overrides values from the file
+    leash.WithEnvVar("MY_VAR", "value"),
 )
 ```
 
@@ -40,33 +38,31 @@ Options applied after `WithPolicyFile` override individual fields from the file.
 ## Executing scripts
 
 ```go
-// Capture stdout/stderr
 result, err := eng.Exec(ctx, `echo hello | tr a-z A-Z`)
-fmt.Println(result.Stdout)   // "HELLO"
-fmt.Println(result.ExitCode) // 0
-fmt.Println(result.Duration) // e.g. "1.2ms"
+fmt.Println(result.Stdout)
+fmt.Println(result.ExitCode)
+fmt.Println(result.Duration)
 
-// Stream to your own writers
 err = eng.ExecWithStreams(ctx, script, os.Stdin, os.Stdout, os.Stderr)
 ```
 
-## Registering skills
+## Registering builtins
 
 ```go
-wordCount := skill.New("word-count").
+wordCount := builtin.New("word-count").
     Description("Count words from stdin").
-    Handle(func(ctx context.Context, c *skill.Call) error {
+    Handle(func(ctx context.Context, c *builtin.Call) error {
         data, _ := io.ReadAll(c.Stdin)
         fmt.Fprintf(c.Stdout, "%d\n", len(strings.Fields(string(data))))
         return nil
     })
 
 eng, cleanup, err := leash.New(ctx,
-    leash.WithSkill(wordCount),
+    leash.WithBuiltin(wordCount),
 )
 ```
 
-See [Skills](skills.md) for the full skill API.
+See [Builtins](builtins.md) for the full builtin API.
 
 ## Inspecting the audit trail
 
@@ -92,15 +88,15 @@ for _, cmd := range result.Audit.Commands {
 | `WithMaxCommandsPerScript(n)` | Maximum number of commands per script |
 | `WithMaxSubshells(n)` | Maximum subshell nesting depth |
 | `WithGlobalRateLimit(count, window)` | Global rate limit across all commands |
-| `WithSkillRateLimit(name, count, window)` | Per-skill rate limit |
+| `WithBuiltinRateLimit(name, count, window)` | Per-builtin rate limit |
 | `WithAllowedBinaries(names...)` | Declare the complete binary allowlist |
 | `WithBlockedPatterns(patterns...)` | Declare the complete blocked pattern list |
 | `WithStaticEnv(map)` | Replace the entire static environment |
 | `WithEnvVar(key, value)` | Add or override a single environment variable |
-| `WithEnabledSkills(names...)` | Whitelist specific skills (empty = all allowed) |
-| `WithRequireConfirmation(names...)` | Skills requiring `CONFIRM_<NAME>=yes` |
-| `WithSkill(s)` | Register a single skill |
-| `WithSkills(s...)` | Register multiple skills |
+| `WithEnabledBuiltins(names...)` | Whitelist specific builtins (empty = all allowed) |
+| `WithRequireConfirmation(names...)` | Builtins requiring `CONFIRM_<NAME>=yes` |
+| `WithBuiltin(b)` | Register a single builtin |
+| `WithBuiltins(b...)` | Register multiple builtins |
 | `WithSandbox(cfg)` | Activate filesystem isolation with the given `sandbox.Config` |
 | `WithPersistentTmp(enabled)` | Share `/tmp` across all commands within a script execution (bwrap only) |
 | `WithMCPServer(cfg)` | Connect an external MCP server |
@@ -114,4 +110,4 @@ A runnable example is available in [`examples/basic/`](../examples/basic/main.go
 go run ./examples/basic/
 ```
 
-It demonstrates custom skills, pipelines, audit trail inspection, and blocked command handling.
+It demonstrates custom builtins, pipelines, audit trail inspection, and blocked command handling.
