@@ -35,10 +35,11 @@ allowed_binaries: # Whitelist — everything else returns exit 127
   - cat
   - echo
 
-blocked_patterns: # Substring matches checked before parsing
+blocked_patterns: # Checked on expanded args after variable interpolation (post-expansion)
   - "rm -rf"
   - "mkfs"
   - "dd if="
+  - "token=secret"
 
 environment:
   inherit: false # Never inherit the host environment (recommended)

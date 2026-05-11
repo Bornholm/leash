@@ -86,6 +86,13 @@ func NewExecHandler(
 
 			// 2. Binaire allowlisté ?
 			if pol.IsAllowedBinary(name) {
+				fullCmd := strings.Join(args, " ")
+				if blocked, pattern := pol.IsBlockedPattern(fullCmd); blocked {
+					recorder.RecordBlocked(name, args[1:], "blocked pattern: "+pattern)
+					fmt.Fprintf(hc.Stderr, "leash: blocked pattern detected: %q\n", pattern)
+					return interp.ExitStatus(127)
+				}
+
 				key := recorder.Start(name, args[1:], false, sandbox.SandboxFromContext(ctx).Name())
 				err := execAllowedBinary(ctx, args, hc)
 				exitCode := 0

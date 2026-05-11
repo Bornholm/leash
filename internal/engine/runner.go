@@ -104,23 +104,18 @@ func (r *Runner) Exec(ctx context.Context, script string) (*ExecResult, error) {
 
 // ExecWithStreams implémente Engine.ExecWithStreams.
 func (r *Runner) ExecWithStreams(ctx context.Context, script string, stdin io.Reader, stdout, stderr io.Writer) (*ExecResult, error) {
-	// 1. Vérification textuelle des patterns bloqués (rapide)
-	if blocked, pattern := r.policy.IsBlockedPattern(script); blocked {
-		return &ExecResult{ExitCode: 1}, fmt.Errorf("blocked pattern detected: %q", pattern)
-	}
-
-	// 2. Parse AST
+	// 1. Parse AST
 	prog, err := syntax.NewParser().Parse(strings.NewReader(script), "script")
 	if err != nil {
 		return nil, fmt.Errorf("parse error: %w", err)
 	}
 
-	// 3. Validation AST (compte commandes, subshells, background jobs)
+	// 2. Validation AST (compte commandes, subshells, background jobs)
 	if err := r.policy.ValidateAST(prog); err != nil {
 		return nil, fmt.Errorf("policy violation: %w", err)
 	}
 
-	// 4. Contexte avec timeout + injection sandbox
+	// 3. Contexte avec timeout + injection sandbox
 	ctx, cancel := context.WithTimeout(ctx, r.policy.MaxExecDuration())
 	defer cancel()
 	ctx = sandbox.ContextWithSandbox(ctx, r.sandbox)
@@ -131,21 +126,21 @@ func (r *Runner) ExecWithStreams(ctx context.Context, script string, stdin io.Re
 		ctx = sandbox.ContextWithTmpDir(ctx, r.sharedTmpDir)
 	}
 
-	// 5. Streams bornés
+	// 4. Streams bornés
 	limitedOut := newLimitedWriter(stdout, r.policy.MaxOutputBytes())
 	limitedErr := newLimitedWriter(stderr, r.policy.MaxOutputBytes())
 
-	// 6. Environnement sécurisé
+	// 5. Environnement sécurisé
 	safeEnv := r.policy.SafeEnvironment()
 	envList := make([]string, 0, len(safeEnv))
 	for k, v := range safeEnv {
 		envList = append(envList, k+"="+v)
 	}
 
-	// 7. AuditRecorder pour cette exécution
+	// 6. AuditRecorder pour cette exécution
 	recorder := security.NewAuditRecorder()
 
-	// 8. Création du runner mvdan
+	// 7. Création du runner mvdan
 	mvRunner, err := interp.New(
 		interp.StdIO(stdin, limitedOut, limitedErr),
 		interp.Env(expand.ListEnviron(envList...)),
