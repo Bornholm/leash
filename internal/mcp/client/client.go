@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -30,25 +31,54 @@ type ConnectedServer struct {
 }
 
 // Connect ouvre une session vers un serveur MCP configuré et récupère la liste de ses tools.
+//
+// Le go-sdk MCP détache délibérément le contexte passé à transport.Connect via
+// xcontext.Detach, de sorte que son contexte de connexion interne (connCtx)
+// n'est pas annulé lorsque notre ctx est annulé. Par conséquent, un
+// context.WithTimeout ou un time.AfterFunc sur ctx n'interrompt pas les dials
+// TCP en cours. De plus, le sdk envoie un DELETE HTTP lors du Close() sur le
+// chemin d'erreur (via connCtx), ce qui produit un second dial.
+//
+// Pour garantir un retour dans les délais configurés indépendamment de ces
+// détails internes, on utilise le pattern goroutine + select : l'opération
+// entière tourne en arrière-plan et on sélectionne le premier résultat.
+// Le Dialer.Timeout sur le transport HTTP borne la durée de vie du goroutine
+// en arrière-plan en cas d'adresse injoignable (évite la fuite indéfinie).
 func Connect(ctx context.Context, cfg security.MCPServerConfig) (*ConnectedServer, error) {
 	timeout := cfg.Timeout.Duration
 	if timeout <= 0 {
 		timeout = defaultMCPConnectTimeout
 	}
-	// On borne la durée du handshake (Connect + premier ListTools) sans
-	// annuler le contexte une fois la session établie : la session (flux SSE
-	// long-lived, sous-processus stdio, etc.) doit rester valide bien après
-	// le retour de cette fonction. Un context.WithTimeout classique avec
-	// defer cancel() annulerait le contexte dès que Connect() retourne,
-	// succès ou pas, ce qui coupe immédiatement la connexion sous-jacente —
-	// timer.Stop() empêche cancel() de se déclencher une fois la connexion
-	// établie ; il ne s'exécute que si le handshake dépasse réellement timeout.
-	ctx, cancel := context.WithCancel(ctx)
-	timer := time.AfterFunc(timeout, cancel)
-	defer timer.Stop()
 
+	type connectResult struct {
+		server *ConnectedServer
+		err    error
+	}
+	// Buffer de 1 pour que le goroutine ne bloque pas si on est déjà partis
+	// (timeout ou annulation du ctx parent).
+	ch := make(chan connectResult, 1)
+
+	go func() {
+		server, err := doConnect(ctx, cfg, timeout)
+		ch <- connectResult{server, err}
+	}()
+
+	select {
+	case r := <-ch:
+		return r.server, r.err
+	case <-time.After(timeout):
+		return nil, fmt.Errorf("serveur MCP %q : délai de connexion dépassé (%v)", cfg.Name, timeout)
+	case <-ctx.Done():
+		return nil, fmt.Errorf("serveur MCP %q : %w", cfg.Name, ctx.Err())
+	}
+}
+
+// doConnect effectue la connexion MCP réelle. Il est toujours exécuté dans
+// un goroutine dédié (cf. Connect) ; ses erreurs sont retournées via un canal.
+func doConnect(ctx context.Context, cfg security.MCPServerConfig, timeout time.Duration) (*ConnectedServer, error) {
 	var transport mcp.Transport
 	var stderrBuf *bytes.Buffer
+
 	switch cfg.Transport {
 	case "stdio":
 		if len(cfg.Command) == 0 {
@@ -76,7 +106,7 @@ func Connect(ctx context.Context, cfg security.MCPServerConfig) (*ConnectedServe
 		}
 		transport = &mcp.StreamableClientTransport{
 			Endpoint:   cfg.URL,
-			HTTPClient: buildHTTPClient(cfg.Headers),
+			HTTPClient: buildHTTPClient(cfg.Headers, timeout),
 		}
 	case "sse":
 		if cfg.URL == "" {
@@ -84,7 +114,7 @@ func Connect(ctx context.Context, cfg security.MCPServerConfig) (*ConnectedServe
 		}
 		transport = &mcp.SSEClientTransport{
 			Endpoint:   cfg.URL,
-			HTTPClient: buildHTTPClient(cfg.Headers),
+			HTTPClient: buildHTTPClient(cfg.Headers, timeout),
 		}
 	default:
 		return nil, fmt.Errorf("serveur MCP %q : transport inconnu %q (attendu: stdio, http, sse)", cfg.Name, cfg.Transport)
@@ -93,9 +123,10 @@ func Connect(ctx context.Context, cfg security.MCPServerConfig) (*ConnectedServe
 	client := mcp.NewClient(&mcp.Implementation{Name: "leash", Version: "1.0.0"}, nil)
 	session, err := client.Connect(ctx, transport, nil)
 	if err != nil {
-		stderrStr := stderrBuf.String()
-		if stderrStr != "" {
-			return nil, fmt.Errorf("connexion au serveur MCP %q : %w ; stderr: %s", cfg.Name, err, stderrStr)
+		if stderrBuf != nil {
+			if stderrStr := stderrBuf.String(); stderrStr != "" {
+				return nil, fmt.Errorf("connexion au serveur MCP %q : %w ; stderr: %s", cfg.Name, err, stderrStr)
+			}
 		}
 		return nil, fmt.Errorf("connexion au serveur MCP %q : %w", cfg.Name, err)
 	}
@@ -115,14 +146,27 @@ func Connect(ctx context.Context, cfg security.MCPServerConfig) (*ConnectedServe
 	}, nil
 }
 
-// buildHTTPClient construit un http.Client avec injection optionnelle d'entêtes fixes.
-func buildHTTPClient(headers map[string]string) *http.Client {
+// buildHTTPClient construit un http.Client avec injection optionnelle d'entêtes fixes
+// et un Dialer borné par dialTimeout. Le timeout Dialer agit au niveau TCP —
+// il ne s'applique qu'à l'établissement de la connexion, pas aux échanges
+// ultérieurs — ce qui préserve les sessions SSE/HTTP long-lived. Il borne
+// également la durée de vie du goroutine de connexion en arrière-plan lorsque
+// Connect() dépasse son délai (pattern goroutine + select dans Connect).
+func buildHTTPClient(headers map[string]string, dialTimeout time.Duration) *http.Client {
+	dialer := &net.Dialer{
+		Timeout:   dialTimeout,
+		KeepAlive: 30 * time.Second,
+	}
+	base := &http.Transport{
+		DialContext:         dialer.DialContext,
+		TLSHandshakeTimeout: dialTimeout,
+	}
 	if len(headers) == 0 {
-		return &http.Client{}
+		return &http.Client{Transport: base}
 	}
 	return &http.Client{
 		Transport: &headerTransport{
-			wrapped: http.DefaultTransport,
+			wrapped: base,
 			headers: headers,
 		},
 	}
