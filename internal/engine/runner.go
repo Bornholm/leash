@@ -27,6 +27,7 @@ type Runner struct {
 	auditor      *security.AuditLogger
 	rl           *security.RateLimiter
 	sandbox      sandbox.Sandbox
+	workDir      string // répertoire de travail du shell (OpenHandler, $PWD, chemins relatifs)
 	sharedTmpDir string // répertoire /tmp partagé entre tous les appels Exec quand PersistentTmp est activé
 }
 
@@ -40,6 +41,7 @@ func New(
 	auditor *security.AuditLogger,
 	rl *security.RateLimiter,
 	sb sandbox.Sandbox,
+	workDir string,
 ) *Runner {
 	if sb == nil {
 		sb = sandbox.NewNone()
@@ -50,6 +52,7 @@ func New(
 		auditor: auditor,
 		rl:      rl,
 		sandbox: sb,
+		workDir: workDir,
 	}
 	if sb.Config().PersistentTmp {
 		if tmpDir, err := os.MkdirTemp("", "leash-tmp-*"); err == nil {
@@ -141,13 +144,17 @@ func (r *Runner) ExecWithStreams(ctx context.Context, script string, stdin io.Re
 	recorder := security.NewAuditRecorder()
 
 	// 7. Création du runner mvdan
-	mvRunner, err := interp.New(
+	runnerOpts := []interp.RunnerOption{
 		interp.StdIO(stdin, limitedOut, limitedErr),
 		interp.Env(expand.ListEnviron(envList...)),
 		interp.ExecHandlers(NewExecHandler(r.reg, r.policy, r.rl, recorder)),
 		interp.OpenHandler(NewFSOpenHandler(r.sandbox.Config())),
 		interp.ReadDirHandler2(NewFSReadDirHandler(r.sandbox.Config())),
-	)
+	}
+	if r.workDir != "" {
+		runnerOpts = append(runnerOpts, interp.Dir(r.workDir))
+	}
+	mvRunner, err := interp.New(runnerOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("creating runner: %w", err)
 	}

@@ -29,13 +29,16 @@ type config struct {
 	inheritEnv bool
 	staticEnv  map[string]string
 
+	builtinsDisabled    bool
 	enabledBuiltins     []string
 	requireConfirmation []string
 
 	mcpServers    []security.MCPServerConfig
 	builtins      []*builtin.Builtin
 	auditWriter   io.Writer
+	auditAttrs    []any
 	sandboxConfig sandbox.Config
+	workDir       string
 }
 
 func (c *config) toPolicyConfig() *security.PolicyConfig {
@@ -63,6 +66,7 @@ func (c *config) toPolicyConfig() *security.PolicyConfig {
 	cfg.BlockedPatterns = c.blockedPatterns
 	cfg.Environment.Inherit = c.inheritEnv
 	cfg.Environment.Static = c.staticEnv
+	cfg.Builtins.Disabled = c.builtinsDisabled
 	cfg.Builtins.Enabled = c.enabledBuiltins
 	cfg.Builtins.RequireConfirmation = c.requireConfirmation
 	cfg.MCPServers = c.mcpServers
@@ -86,6 +90,7 @@ func (c *config) applyPolicyConfig(p *security.PolicyConfig) {
 	c.blockedPatterns = p.BlockedPatterns
 	c.inheritEnv = p.Environment.Inherit
 	c.staticEnv = p.Environment.Static
+	c.builtinsDisabled = p.Builtins.Disabled
 	c.enabledBuiltins = p.Builtins.Enabled
 	c.requireConfirmation = p.Builtins.RequireConfirmation
 	c.mcpServers = p.MCPServers

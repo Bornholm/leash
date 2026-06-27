@@ -89,6 +89,10 @@ func (p *policyEngine) ValidateAST(prog any) error {
 }
 
 func (p *policyEngine) CanExecuteBuiltin(ctx context.Context, name string, args []string) error {
+	if p.cfg.Builtins.Disabled {
+		return fmt.Errorf("builtins are disabled by policy")
+	}
+
 	if len(p.enabledBuiltins) > 0 {
 		if _, ok := p.enabledBuiltins[name]; !ok {
 			return fmt.Errorf("builtin %q is not enabled by policy", name)
@@ -138,8 +142,9 @@ func (p *policyEngine) SafeEnvironment() map[string]string {
 }
 
 func (p *policyEngine) IsBlockedPattern(script string) (bool, string) {
+	lower := strings.ToLower(script)
 	for _, pattern := range p.cfg.BlockedPatterns {
-		if strings.Contains(script, pattern) {
+		if strings.Contains(lower, strings.ToLower(pattern)) {
 			return true, pattern
 		}
 	}
@@ -147,7 +152,14 @@ func (p *policyEngine) IsBlockedPattern(script string) (bool, string) {
 }
 
 func (p *policyEngine) EnabledBuiltins() []string {
+	if p.cfg.Builtins.Disabled {
+		return nil
+	}
 	return p.cfg.Builtins.Enabled
+}
+
+func (p *policyEngine) BuiltinsDisabled() bool {
+	return p.cfg.Builtins.Disabled
 }
 
 func (p *policyEngine) AllowedBinaries() []string {

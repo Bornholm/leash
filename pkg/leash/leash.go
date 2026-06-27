@@ -26,6 +26,7 @@ import (
 	"github.com/bornholm/leash/internal/registry"
 	"github.com/bornholm/leash/internal/security"
 	"github.com/bornholm/leash/internal/security/sandbox"
+	"github.com/bornholm/leash/pkg/builtin"
 )
 
 // Engine est l'interface publique du moteur d'exécution shell.
@@ -37,6 +38,13 @@ type Engine interface {
 
 	// ExecWithStreams exécute un script avec des streams I/O fournis par l'appelant.
 	ExecWithStreams(ctx context.Context, script string, stdin io.Reader, stdout, stderr io.Writer) (*ExecResult, error)
+
+	// Instructions retourne un texte Markdown listant les commandes shell
+	// réellement disponibles pour cet Engine (builtins + binaires autorisés
+	// par sa policy), à injecter dans le champ "instructions" d'un serveur
+	// MCP pour que l'agent appelant découvre les commandes plutôt que de
+	// deviner un nom et se faire bloquer en boucle.
+	Instructions() string
 }
 
 // Vérification statique que *engine.Runner satisfait l'interface Engine publique.
@@ -80,13 +88,35 @@ func New(ctx context.Context, opts ...Option) (Engine, func(), error) {
 	var auditor *security.AuditLogger
 	if cfg.auditWriter != nil {
 		handler := slog.NewJSONHandler(cfg.auditWriter, nil)
-		auditor = security.NewAuditLogger(slog.New(handler))
+		auditLogger := slog.New(handler)
+		if len(cfg.auditAttrs) > 0 {
+			auditLogger = auditLogger.With(cfg.auditAttrs...)
+		}
+		auditor = security.NewAuditLogger(auditLogger)
 	}
 
 	reg := registry.New()
 	for _, sk := range cfg.builtins {
 		if err := reg.Register(sk); err != nil {
 			return nil, nil, fmt.Errorf("leash: registering builtin %q: %w", sk.Name, err)
+		}
+	}
+
+	// "leash-help" est toujours enregistré (sauf si l'appelant en fournit déjà
+	// un via WithBuiltin) : c'est le mécanisme de découverte de commandes
+	// référencé par Instructions() et par chaque réponse "BLOCKED", et une
+	// policy ne peut l'activer (builtins.enabled: ["leash-help"]) que s'il
+	// existe réellement dans le registre — l'activer reste soumis à la
+	// policy (builtins.disabled / enabled) comme tout autre builtin.
+	if _, exists := reg.Get("leash-help"); !exists {
+		if err := reg.Register(builtin.New("leash-help").
+			Description("List all available shell commands with their usage and flags.").
+			Example("List all commands", "leash-help").
+			Handle(func(_ context.Context, c *builtin.Call) error {
+				fmt.Fprint(c.Stdout, reg.GenerateManifest())
+				return nil
+			})); err != nil {
+			return nil, nil, fmt.Errorf("leash: registering leash-help builtin: %w", err)
 		}
 	}
 
@@ -105,7 +135,7 @@ func New(ctx context.Context, opts ...Option) (Engine, func(), error) {
 		})
 	}
 
-	eng := engine.New(pol, reg, auditor, rl, sb)
+	eng := engine.New(pol, reg, auditor, rl, sb, cfg.workDir)
 	cleanupFns = append(cleanupFns, eng.Close)
 
 	cleanup := func() {

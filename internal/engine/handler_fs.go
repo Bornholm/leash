@@ -30,7 +30,7 @@ func NewFSOpenHandler(cfg sandbox.Config) interp.OpenHandlerFunc {
 		// ReadwriteBinds (chemin hôte source) → lecture et écriture
 		for _, b := range cfg.ReadwriteBinds {
 			if isUnder(absPath, b.Source) {
-				return os.OpenFile(path, flag, perm)
+				return os.OpenFile(absPath, flag, perm)
 			}
 		}
 
@@ -43,7 +43,7 @@ func NewFSOpenHandler(cfg sandbox.Config) interp.OpenHandlerFunc {
 						return os.OpenFile(filepath.Join(sharedTmpDir, rel), flag, perm)
 					}
 				}
-				return os.OpenFile(path, flag, perm)
+				return os.OpenFile(absPath, flag, perm)
 			}
 		}
 
@@ -53,7 +53,7 @@ func NewFSOpenHandler(cfg sandbox.Config) interp.OpenHandlerFunc {
 				if isWrite {
 					return nil, &os.PathError{Op: "open", Path: path, Err: syscall.EROFS}
 				}
-				return os.OpenFile(path, flag, perm)
+				return os.OpenFile(absPath, flag, perm)
 			}
 		}
 
@@ -63,10 +63,10 @@ func NewFSOpenHandler(cfg sandbox.Config) interp.OpenHandlerFunc {
 				if isWrite {
 					return nil, &os.PathError{Op: "open", Path: path, Err: syscall.EROFS}
 				}
-				return os.OpenFile(path, flag, perm)
+				return os.OpenFile(absPath, flag, perm)
 			}
 			if isUnder(absPath, "/dev") {
-				return os.OpenFile(path, flag, perm)
+				return os.OpenFile(absPath, flag, perm)
 			}
 		}
 
@@ -87,7 +87,7 @@ func NewFSReadDirHandler(cfg sandbox.Config) interp.ReadDirHandlerFunc2 {
 
 		for _, b := range cfg.ReadwriteBinds {
 			if isUnder(absPath, b.Source) {
-				return os.ReadDir(path)
+				return os.ReadDir(absPath)
 			}
 		}
 		for _, t := range cfg.Tmpfs {
@@ -98,17 +98,17 @@ func NewFSReadDirHandler(cfg sandbox.Config) interp.ReadDirHandlerFunc2 {
 						return os.ReadDir(filepath.Join(sharedTmpDir, rel))
 					}
 				}
-				return os.ReadDir(path)
+				return os.ReadDir(absPath)
 			}
 		}
 		for _, ro := range cfg.ReadonlyBinds {
 			if isUnder(absPath, ro) {
-				return os.ReadDir(path)
+				return os.ReadDir(absPath)
 			}
 		}
 		if cfg.Backend == "bwrap" {
 			if isUnder(absPath, "/proc") || isUnder(absPath, "/dev") {
-				return os.ReadDir(path)
+				return os.ReadDir(absPath)
 			}
 		}
 
@@ -117,17 +117,26 @@ func NewFSReadDirHandler(cfg sandbox.Config) interp.ReadDirHandlerFunc2 {
 }
 
 // resolvePath retourne le chemin absolu normalisé.
-// Les chemins relatifs sont résolus par rapport au répertoire courant du shell.
+// Les chemins relatifs sont résolus par rapport au répertoire courant du shell
+// (interp.HandlerCtx(ctx).Dir), qui reflète le Dir configuré sur le runner
+// mvdan (WithWorkDir) ainsi que tout cd exécuté en cours de script.
 func resolvePath(ctx context.Context, path string) string {
 	if filepath.IsAbs(path) {
 		return filepath.Clean(path)
 	}
-	hcVal := ctx.Value(struct{}{})
-	if hc, ok := hcVal.(interp.HandlerContext); ok {
-		return filepath.Clean(filepath.Join(hc.Dir, path))
+	if dir := handlerDir(ctx); dir != "" {
+		return filepath.Clean(filepath.Join(dir, path))
 	}
 	cwd, _ := os.Getwd()
 	return filepath.Clean(filepath.Join(cwd, path))
+}
+
+// handlerDir extrait le répertoire courant du HandlerContext mvdan.
+// interp.HandlerCtx panique si le contexte ne contient pas de HandlerContext
+// (cas des tests unitaires sans runner) — le recover absorbe ce cas.
+func handlerDir(ctx context.Context) (dir string) {
+	defer func() { _ = recover() }()
+	return interp.HandlerCtx(ctx).Dir
 }
 
 // isUnder vérifie si path est sous dir (ou égal à dir).

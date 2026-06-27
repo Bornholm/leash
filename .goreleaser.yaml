@@ -29,6 +29,22 @@ builds:
       - goos: windows
         goarch: arm64
 
+  - id: leash-server
+    main: ./cmd/server
+    binary: leash-server
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+
 archives:
   - id: leash
     ids:
@@ -45,6 +61,19 @@ archives:
     files:
       - policies/
       - README.md
+
+  - id: leash-server
+    ids:
+      - leash-server
+    name_template: >-
+      {{ .ProjectName }}-server_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+    files:
+      - policies/
+      - README.md
+      - docs/docker.md
 
 checksum:
   name_template: checksums.txt
@@ -71,7 +100,10 @@ changelog:
       - Merge branch
 
 dockers_v2:
-  - images:
+  - id: leash
+    ids:
+      - leash
+    images:
       - ghcr.io/bornholm/leash
     tags:
       - "{{ .Tag }}"
@@ -85,6 +117,29 @@ dockers_v2:
     labels:
       org.opencontainers.image.title: "{{ .ProjectName }}"
       org.opencontainers.image.description: "Policy-enforced sandboxed shell execution engine"
+      org.opencontainers.image.url: "https://github.com/bornholm/leash"
+      org.opencontainers.image.source: "https://github.com/bornholm/leash"
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.licenses: "MIT"
+
+  - id: leash-server
+    ids:
+      - leash-server
+    images:
+      - ghcr.io/bornholm/leash-server
+    tags:
+      - "{{ .Tag }}"
+      - latest
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    dockerfile: Dockerfile.server.goreleaser
+    extra_files:
+      - policies/
+    labels:
+      org.opencontainers.image.title: "{{ .ProjectName }}-server"
+      org.opencontainers.image.description: "LeaSH MCP HTTP Streaming server — multi-tenant, bubblewrap-sandboxed"
       org.opencontainers.image.url: "https://github.com/bornholm/leash"
       org.opencontainers.image.source: "https://github.com/bornholm/leash"
       org.opencontainers.image.version: "{{ .Version }}"

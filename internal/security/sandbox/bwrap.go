@@ -3,6 +3,8 @@ package sandbox
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -47,6 +49,10 @@ func (s *bwrapSandbox) buildArgs(origEnv []string, sharedTmpDir string) []string
 	}
 
 	for _, p := range s.cfg.ReadonlyBinds {
+		if _, err := os.Stat(p); err != nil {
+			slog.Debug("bwrap: skipping non-existent readonly bind", "path", p)
+			continue
+		}
 		args = append(args, "--ro-bind", p, p)
 	}
 	for _, b := range s.cfg.ReadwriteBinds {

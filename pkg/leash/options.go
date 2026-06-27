@@ -106,6 +106,18 @@ func WithEnabledBuiltins(builtins ...string) Option {
 	}
 }
 
+// WithBuiltinsDisabled désactive entièrement tous les builtins, sans ambiguïté.
+// Contrairement à WithEnabledBuiltins(), une liste vide via cette dernière
+// signifie « tous autorisés » ; WithBuiltinsDisabled() signifie toujours
+// « aucun builtin », et prend le pas sur WithEnabledBuiltins() quel que soit
+// l'ordre d'application des options.
+func WithBuiltinsDisabled() Option {
+	return func(c *config) error {
+		c.builtinsDisabled = true
+		return nil
+	}
+}
+
 func WithRequireConfirmation(builtins ...string) Option {
 	return func(c *config) error {
 		c.requireConfirmation = builtins
@@ -196,6 +208,19 @@ func WithAuditWriter(w io.Writer) Option {
 	}
 }
 
+// WithAuditAttrs ajoute des paires clé/valeur statiques (format slog : "k1",
+// v1, "k2", v2, ...) à chaque ligne de log d'audit produite par cet Engine.
+// Permet à un appelant qui gère plusieurs Engine (ex. un workspace par
+// tenant) de distinguer les commandes exécutées par chacun dans des logs
+// partagés, par exemple : WithAuditAttrs("workspace_id", id, "api_key", name).
+// Sans effet si WithAuditWriter n'est pas également utilisé.
+func WithAuditAttrs(args ...any) Option {
+	return func(c *config) error {
+		c.auditAttrs = append(c.auditAttrs, args...)
+		return nil
+	}
+}
+
 // WithPersistentTmp active le partage de /tmp entre toutes les commandes d'un même script.
 // Quand activé, un répertoire temporaire hôte est créé pour chaque appel ExecWithStreams et
 // monté comme /tmp dans chaque processus bwrap, ce qui permet aux fichiers écrits dans /tmp
@@ -209,6 +234,17 @@ func WithPersistentTmp(enabled bool) Option {
 
 // WithSandbox active l'isolation filesystem avec la configuration fournie.
 // Si backend est "none" ou vide, aucun changement comportemental.
+// WithWorkDir définit le répertoire de travail du shell (affecte $PWD, les
+// redirections I/O et les chemins relatifs dans les builtins mvdan).
+// Doit correspondre au répertoire hôte réel du workspace quand un sandbox
+// est configuré, afin que le shell voie le même répertoire que bwrap --bind.
+func WithWorkDir(dir string) Option {
+	return func(c *config) error {
+		c.workDir = dir
+		return nil
+	}
+}
+
 func WithSandbox(cfg sandbox.Config) Option {
 	return func(c *config) error {
 		c.sandboxConfig = cfg

@@ -206,7 +206,7 @@ func buildEngine(ctx context.Context, polFile, auditLog string) (engine.Engine, 
 		auditCloser()
 	}
 
-	eng := engine.New(pol, reg, auditor, rl, sb)
+	eng := engine.New(pol, reg, auditor, rl, sb, "")
 
 	helpBuiltin := builtin.New("leash-help").
 		Description("List all available shell commands with their usage and flags.").

@@ -22,6 +22,15 @@ type Engine interface {
 
 	// Policy retourne le moteur de politique actif.
 	Policy() security.PolicyEngine
+
+	// Instructions retourne un texte au format Markdown, destiné au champ
+	// "instructions" d'un serveur MCP, qui liste les commandes shell
+	// effectivement disponibles pour CET Engine (builtins enregistrés +
+	// binaires autorisés par sa policy). Partagé par tous les transports MCP
+	// (stdio et HTTP) pour qu'un agent découvre les commandes réelles plutôt
+	// que de deviner un nom (ex. "leash_help" au lieu de "leash-help") et de
+	// se faire bloquer en boucle sans retour exploitable.
+	Instructions() string
 }
 
 // OutputChunk représente un fragment de sortie avec son origine (stdout ou stderr).

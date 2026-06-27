@@ -1,3 +1,4 @@
 *.jsonl
 data/
 /bin
+/dist

@@ -61,6 +61,11 @@ type MCPServerConfig struct {
 	Env       map[string]string `yaml:"env"`       // env vars supplémentaires pour le sous-processus stdio
 	URL       string            `yaml:"url"`       // pour http : endpoint SSE/Streamable
 	Headers   map[string]string `yaml:"headers"`   // pour http : entêtes HTTP à injecter (ex: Authorization)
+	// Timeout borne la connexion + le premier ListTools à ce serveur. Si
+	// absent ou nul, defaultMCPConnectTimeout (10s) s'applique. Sans cette
+	// borne, un serveur MCP injoignable bloquerait indéfiniment leash.New
+	// (et donc, côté mcphttp, toute la création de workspace).
+	Timeout Duration `yaml:"timeout"`
 }
 
 // PolicyConfig est la structure de configuration YAML d'une politique.
@@ -83,6 +88,10 @@ type PolicyConfig struct {
 		Passthrough []string          `yaml:"passthrough"`
 	} `yaml:"environment"`
 	Builtins struct {
+		// Disabled désactive entièrement tous les builtins, sans ambiguïté avec
+		// Enabled vide (qui signifie "tous autorisés"). Si Disabled est vrai,
+		// Enabled est ignoré.
+		Disabled            bool     `yaml:"disabled"`
 		Enabled             []string `yaml:"enabled"`
 		RequireConfirmation []string `yaml:"require_confirmation"`
 	} `yaml:"builtins"`

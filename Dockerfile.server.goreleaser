@@ -1,0 +1,26 @@
+FROM alpine:3.21
+
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+
+RUN apk add --no-cache bubblewrap
+
+RUN adduser -D -u 1000 leash
+
+WORKDIR /app
+
+COPY ${TARGETOS}/${TARGETARCH}/leash-server /app/leash-server
+
+COPY policies/ /app/policies/
+RUN mkdir -p /var/lib/leash/workspaces && chown leash:leash /var/lib/leash/workspaces
+
+VOLUME ["/var/lib/leash/workspaces"]
+
+EXPOSE 8443
+
+ENV LEASH_MCP_LISTEN_ADDR=0.0.0.0:8443
+ENV LEASH_WORKSPACE_ROOT=/var/lib/leash/workspaces
+
+USER leash
+
+ENTRYPOINT ["/app/leash-server"]

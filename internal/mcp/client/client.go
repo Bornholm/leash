@@ -9,10 +9,18 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"time"
 
 	"github.com/bornholm/leash/internal/security"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+// defaultMCPConnectTimeout borne la connexion à un serveur MCP externe
+// (handshake + premier ListTools) lorsque cfg.Timeout n'est pas renseigné.
+// Sans cette borne, un serveur injoignable (DNS qui ne répond pas, port
+// fermé en silence, sous-processus stdio qui ne se termine jamais) bloque
+// indéfiniment Connect, et donc tout leash.New qui en dépend.
+const defaultMCPConnectTimeout = 10 * time.Second
 
 // ConnectedServer représente une connexion active à un serveur MCP externe.
 type ConnectedServer struct {
@@ -23,6 +31,22 @@ type ConnectedServer struct {
 
 // Connect ouvre une session vers un serveur MCP configuré et récupère la liste de ses tools.
 func Connect(ctx context.Context, cfg security.MCPServerConfig) (*ConnectedServer, error) {
+	timeout := cfg.Timeout.Duration
+	if timeout <= 0 {
+		timeout = defaultMCPConnectTimeout
+	}
+	// On borne la durée du handshake (Connect + premier ListTools) sans
+	// annuler le contexte une fois la session établie : la session (flux SSE
+	// long-lived, sous-processus stdio, etc.) doit rester valide bien après
+	// le retour de cette fonction. Un context.WithTimeout classique avec
+	// defer cancel() annulerait le contexte dès que Connect() retourne,
+	// succès ou pas, ce qui coupe immédiatement la connexion sous-jacente —
+	// timer.Stop() empêche cancel() de se déclencher une fois la connexion
+	// établie ; il ne s'exécute que si le handshake dépasse réellement timeout.
+	ctx, cancel := context.WithCancel(ctx)
+	timer := time.AfterFunc(timeout, cancel)
+	defer timer.Stop()
+
 	var transport mcp.Transport
 	var stderrBuf *bytes.Buffer
 	switch cfg.Transport {
@@ -78,7 +102,9 @@ func Connect(ctx context.Context, cfg security.MCPServerConfig) (*ConnectedServe
 
 	result, err := session.ListTools(ctx, &mcp.ListToolsParams{})
 	if err != nil {
-		_ = session.Close()
+		if closeErr := session.Close(); closeErr != nil {
+			slog.Warn("mcp client: error closing session after ListTools failure", "server", cfg.Name, "error", closeErr)
+		}
 		return nil, fmt.Errorf("listage des tools du serveur MCP %q : %w", cfg.Name, err)
 	}
 

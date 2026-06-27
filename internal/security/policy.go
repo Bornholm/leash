@@ -22,7 +22,15 @@ type PolicyEngine interface {
 
 	IsBlockedPattern(script string) (bool, string)
 
+	// EnabledBuiltins retourne la whitelist configurée. Ambigu seul : nil
+	// signifie aussi bien "builtins désactivés" que "whitelist vide = tous
+	// les builtins enregistrés sont autorisés" (cf. BuiltinsDisabled pour
+	// lever l'ambiguïté).
 	EnabledBuiltins() []string
+
+	// BuiltinsDisabled indique si les builtins sont entièrement désactivés
+	// (cfg.Builtins.Disabled), indépendamment du contenu de la whitelist.
+	BuiltinsDisabled() bool
 
 	AllowedBinaries() []string
 

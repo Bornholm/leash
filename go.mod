@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/d5/tengo/v2 v2.17.0
+	github.com/joho/godotenv v1.5.1
 	github.com/modelcontextprotocol/go-sdk v1.4.1
 	github.com/peterh/liner v1.2.2
 	github.com/spf13/cobra v1.10.2

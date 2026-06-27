@@ -119,6 +119,9 @@ External MCP servers are started as subprocesses and connected via stdio or HTTP
 | `env`       | Environment variables for the server process |
 | `url`       | Endpoint URL (for http/sse)                  |
 | `headers`   | HTTP headers (for http/sse)                  |
+| `timeout`   | Max duration for connecting + listing tools (Go duration, e.g. `5s`). Defaults to `10s` if unset. |
+
+Connecting to an external MCP server is synchronous and happens while the engine is being built (`leash.New`): an unreachable server (closed port, silently dropped packets, a stdio command that never exits) would otherwise block engine creation indefinitely, since the context passed in by callers may have no deadline of its own (this is the case for the [MCP HTTP Streaming server](mcp-http.md), where it's the incoming `initialize` request's context). `timeout` bounds this per server; a failure past the deadline is logged and the server is skipped (degraded mode), it does not fail the whole engine.
 
 ### `environment` vs `env`
 

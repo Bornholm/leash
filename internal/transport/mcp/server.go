@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/bornholm/leash/internal/engine"
@@ -21,67 +22,12 @@ func New(eng engine.Engine) *MCPServer {
 	s := mcp.NewServer(
 		&mcp.Implementation{Name: "LeaSH", Version: "1.0.0"},
 		&mcp.ServerOptions{
-			Instructions: buildInstructions(eng),
+			Instructions: eng.Instructions(),
 		},
 	)
 	ms := &MCPServer{eng: eng, server: s}
 	ms.registerTools()
 	return ms
-}
-
-// buildInstructions generates server instructions for the LLM agent based on the
-// registered commands and available binaries.
-func buildInstructions(eng engine.Engine) string {
-	var sb strings.Builder
-
-	sb.WriteString(`LeaSH is a policy-enforced shell sandbox.
-
-## The ONLY MCP tool is: execute_shell
-
-There is exactly one MCP tool: **execute_shell**. Do NOT attempt to call any other name as an MCP tool.
-All operations are performed by passing shell scripts to execute_shell.
-
-## Shell commands vs MCP tools
-
-LeaSH registers domain-specific commands as SHELL commands (not MCP tools).
-These commands are invoked exclusively inside shell scripts via execute_shell.
-
-To discover available shell commands:
-  execute_shell { "script": "leash-help" }
-
-To get help on a specific command:
-  execute_shell { "script": "leash-help <command>" }
-  or:
-  execute_shell { "script": "<command> --help" }
-
-`)
-
-	// Available commands = registered commands + allowed binaries
-	commands := eng.Registry().ListNames()
-	binaries := eng.Policy().AllowedBinaries()
-
-	if len(binaries) == 0 && len(commands) == 0 {
-		sb.WriteString("## Available shell commands\nNo commands are currently available.\n")
-	} else {
-		sb.WriteString("## Available shell commands\n(These are shell commands — invoke them via execute_shell, NOT as MCP tools)\n\n")
-		for _, c := range commands {
-			sb.WriteString("- " + c + "\n")
-		}
-		for _, b := range binaries {
-			sb.WriteString("- " + b + " (system binary)\n")
-		}
-		sb.WriteString("\nAny other command will be blocked (exit code 127).\n")
-	}
-
-	sb.WriteString(`
-## Rules
-
-1. Use execute_shell for EVERYTHING — scripts, commands, pipes, loops, etc.
-2. Command blocked (exit 127)? Run execute_shell { "script": "leash-help" } to see available commands.
-3. Do NOT call shell command names as MCP tools. They are shell commands only.
-`)
-
-	return sb.String()
 }
 
 // ServeStdio démarre le serveur MCP sur stdin/stdout.
@@ -111,9 +57,14 @@ func (ms *MCPServer) registerTools() {
 
 }
 
-func (ms *MCPServer) handleExecuteShell(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+// handleExecuteShell trace la réponse (ou l'erreur) effectivement renvoyée à
+// l'agent pour l'unique tool MCP exposé — y compris les erreurs propres au
+// tool (paramètres invalides, script manquant) qui ne passent jamais par
+// l'Engine et ne sont donc jamais vues par l'audit log.
+func (ms *MCPServer) handleExecuteShell(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	var args map[string]any
 	if err := json.Unmarshal(req.Params.Arguments, &args); err != nil {
+		slog.WarnContext(ctx, "mcp: execute_shell tool error: invalid parameters", "error", err)
 		return errorResult("invalid parameters: " + err.Error()), nil
 	}
 
@@ -131,11 +82,13 @@ func (ms *MCPServer) handleExecuteShell(_ context.Context, req *mcp.CallToolRequ
 	}
 
 	if script == "" {
+		slog.WarnContext(ctx, "mcp: execute_shell tool error: missing script parameter")
 		return errorResult("parameter 'script' is required"), nil
 	}
 
 	result, err := ms.eng.Exec(context.Background(), script)
 	if err != nil {
+		slog.ErrorContext(ctx, "mcp: execute_shell tool error: execution failed", "error", err)
 		return errorResult(fmt.Sprintf("execution error: %v", err)), nil
 	}
 
@@ -166,8 +119,15 @@ func (ms *MCPServer) handleExecuteShell(_ context.Context, req *mcp.CallToolRequ
 		}
 	}
 
+	response := sb.String()
+	slog.DebugContext(ctx, "mcp: execute_shell tool response",
+		"is_error", result.ExitCode != 0,
+		"exit_code", result.ExitCode,
+		"response", response,
+	)
+
 	return &mcp.CallToolResult{
-		Content: []mcp.Content{&mcp.TextContent{Text: sb.String()}},
+		Content: []mcp.Content{&mcp.TextContent{Text: response}},
 		IsError: result.ExitCode != 0,
 	}, nil
 }
