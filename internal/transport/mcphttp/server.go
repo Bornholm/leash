@@ -203,7 +203,7 @@ func (s *Server) getServer(r *http.Request) *mcp.Server {
 	}
 
 	srvOpts := &mcp.ServerOptions{
-		Instructions: ws.engine.Instructions(),
+		Instructions: ws.instructions(key.Name),
 	}
 
 	if ephemeral {
@@ -231,7 +231,7 @@ func (s *Server) getServer(r *http.Request) *mcp.Server {
 	}
 
 	srv := mcp.NewServer(&mcp.Implementation{Name: "LeaSH", Version: "1.0.0"}, srvOpts)
-	registerExecuteShell(srv, ws)
+	registerExecuteShell(srv, ws, key.Name)
 	return srv
 }
 
@@ -244,7 +244,7 @@ func generateEphemeralID() (string, error) {
 	return "eph-" + hex.EncodeToString(b), nil
 }
 
-func registerExecuteShell(srv *mcp.Server, ws *Workspace) {
+func registerExecuteShell(srv *mcp.Server, ws *Workspace, keyName string) {
 	srv.AddTool(
 		&mcp.Tool{
 			Name:        "execute_shell",
@@ -261,12 +261,12 @@ func registerExecuteShell(srv *mcp.Server, ws *Workspace) {
 			},
 		},
 		func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return handleExecuteShell(ctx, req, ws)
+			return handleExecuteShell(ctx, req, ws, keyName)
 		},
 	)
 }
 
-func handleExecuteShell(ctx context.Context, req *mcp.CallToolRequest, ws *Workspace) (*mcp.CallToolResult, error) {
+func handleExecuteShell(ctx context.Context, req *mcp.CallToolRequest, ws *Workspace, keyName string) (*mcp.CallToolResult, error) {
 	var args map[string]any
 	if err := json.Unmarshal(req.Params.Arguments, &args); err != nil {
 		slog.WarnContext(ctx, "mcphttp: execute_shell tool error: invalid parameters",
@@ -285,7 +285,7 @@ func handleExecuteShell(ctx context.Context, req *mcp.CallToolRequest, ws *Works
 	}
 
 	var stdout, stderr strings.Builder
-	result, err := ws.Exec(ctx, script, nil, &stdout, &stderr)
+	result, err := ws.Exec(ctx, keyName, script, nil, &stdout, &stderr)
 	if err != nil {
 		slog.ErrorContext(ctx, "mcphttp: execute_shell tool error: execution failed",
 			"workspace_id", ws.id, "api_key", ws.apiKey,

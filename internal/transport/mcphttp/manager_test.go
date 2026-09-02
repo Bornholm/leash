@@ -71,7 +71,7 @@ func TestWorkspace_ExecIsSerializedAcrossGoroutines(t *testing.T) {
 	var wg sync.WaitGroup
 	for range n {
 		wg.Go(func() {
-			if _, err := ws.Exec(context.Background(), "echo hi", nil, io.Discard, io.Discard); err != nil {
+			if _, err := ws.Exec(context.Background(), "", "echo hi", nil, io.Discard, io.Discard); err != nil {
 				t.Errorf("Exec: %v", err)
 			}
 		})
@@ -295,4 +295,72 @@ func TestManager_ShutdownStopsReaperWithoutGoroutineLeak(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatalf("goroutine leak suspected: before=%d after=%d", before, runtime.NumGoroutine())
+}
+
+// Deux clés API visant le MÊME tenant doivent obtenir chacune leur moteur,
+// donc leur policy. Sans cela, la seconde clé hérite de la policy de la
+// première au hasard de l'ordre d'arrivée : une clé restreinte au
+// téléchargement s'est ainsi vue appliquer la policy de l'atelier (aucun
+// accès réseau), et la commande refusée — vu en production le 2026-08-29.
+// L'inverse est un défaut de sécurité : une clé étroite pourrait hériter
+// d'une policy large.
+func TestManager_EngineIsPerAPIKey(t *testing.T) {
+	engines := map[string]*fakeEngine{}
+	var mu sync.Mutex
+
+	factory := func(ctx context.Context, dir string, key *APIKeyConfig) (leash.Engine, func(), error) {
+		mu.Lock()
+		defer mu.Unlock()
+		eng := &fakeEngine{}
+		engines[key.Name] = eng
+		return eng, func() {}, nil
+	}
+
+	m, _ := newTestManager(t, factory)
+	defer m.Shutdown()
+
+	ctx := context.Background()
+	atelier := &APIKeyConfig{Name: "ATELIER"}
+	fetch := &APIKeyConfig{Name: "FETCH"}
+
+	// La première clé crée le workspace.
+	ws, err := m.Acquire(ctx, "tenant", atelier)
+	if err != nil {
+		t.Fatalf("Acquire (atelier): %v", err)
+	}
+
+	// La seconde clé retrouve LE MÊME workspace — les fichiers sont
+	// partagés, c'est tout l'intérêt — mais avec SON moteur.
+	ws2, err := m.Acquire(ctx, "tenant", fetch)
+	if err != nil {
+		t.Fatalf("Acquire (fetch): %v", err)
+	}
+	if ws2 != ws {
+		t.Fatal("le workspace doit être partagé entre les clés du même tenant")
+	}
+	if ws.dir != ws2.dir {
+		t.Fatal("le répertoire doit être partagé")
+	}
+
+	if len(engines) != 2 {
+		t.Fatalf("%d moteur(s) construit(s), attendu 2 (un par clé)", len(engines))
+	}
+	if ws.engineFor("ATELIER") == ws.engineFor("FETCH") {
+		t.Fatal("les deux clés partagent un moteur : la policy de l'une s'applique à l'autre")
+	}
+
+	// Chaque exécution part sur le moteur de SA clé.
+	if _, err := ws.Exec(ctx, "FETCH", "fetch-video", nil, io.Discard, io.Discard); err != nil {
+		t.Fatalf("Exec (fetch): %v", err)
+	}
+	if engines["FETCH"].calls.Load() != 1 || engines["ATELIER"].calls.Load() != 0 {
+		t.Errorf("l'exécution n'a pas emprunté le moteur de sa clé (fetch=%d, atelier=%d)",
+			engines["FETCH"].calls.Load(), engines["ATELIER"].calls.Load())
+	}
+
+	// Une clé sans moteur sur ce workspace ne s'exécute pas en silence
+	// sous la policy d'une autre.
+	if _, err := ws.Exec(ctx, "INCONNUE", "echo", nil, io.Discard, io.Discard); err == nil {
+		t.Error("une clé sans moteur doit échouer, jamais emprunter celui d'une autre")
+	}
 }

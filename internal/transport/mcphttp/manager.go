@@ -58,6 +58,15 @@ func (m *Manager) Acquire(ctx context.Context, id string, key *APIKeyConfig) (*W
 	if ws, ok := m.spaces[id]; ok {
 		ws.lastAccess.Store(m.now().UnixNano())
 		slog.DebugContext(ctx, "mcphttp: reusing existing workspace", "workspace_id", id, "api_key", key.Name)
+
+		// Le workspace est partagé par tenant, le MOTEUR ne l'est pas :
+		// une clé qui arrive sur un workspace créé par une autre doit
+		// obtenir SA policy, jamais hériter de celle du premier arrivé.
+		if ws.engineFor(key.Name) == nil {
+			if err := m.addEngine(ctx, ws, key); err != nil {
+				return nil, err
+			}
+		}
 		return ws, nil
 	}
 
@@ -89,14 +98,37 @@ func (m *Manager) Acquire(ctx context.Context, id string, key *APIKeyConfig) (*W
 		id:       id,
 		dir:      dir,
 		apiKey:   key.Name,
-		engine:   eng,
-		cleanup:  cleanup,
 		execSlot: make(chan struct{}, 1),
+		engines:  map[string]*workspaceEngine{key.Name: {engine: eng, cleanup: cleanup}},
 	}
 	ws.lastAccess.Store(m.now().UnixNano())
 	m.spaces[id] = ws
 	slog.InfoContext(ctx, "mcphttp: created new workspace", "workspace_id", id, "api_key", key.Name, "dir", dir)
 	return ws, nil
+}
+
+// addEngine construit le moteur d'une clé sur un workspace existant : le
+// répertoire est déjà là, seule la policy de cette clé est nouvelle.
+// Appelé avec m.mu tenu.
+func (m *Manager) addEngine(ctx context.Context, ws *Workspace, key *APIKeyConfig) error {
+	// Contexte propre, comme à la création : le moteur et ses connexions
+	// survivent à la requête qui les a déclenchés.
+	eng, cleanup, err := m.factory(context.Background(), ws.dir, key)
+	if err != nil {
+		return fmt.Errorf("mcphttp: building engine for API key %q: %w", key.Name, err)
+	}
+
+	if _, replaced := ws.putEngine(key.Name, &workspaceEngine{engine: eng, cleanup: cleanup}); replaced {
+		// Course perdue : un autre appel a posé le moteur entre-temps.
+		if cleanup != nil {
+			cleanup()
+		}
+		return nil
+	}
+
+	slog.InfoContext(ctx, "mcphttp: added engine to existing workspace",
+		"workspace_id", ws.id, "api_key", key.Name)
+	return nil
 }
 
 // StartReaper lance une goroutine qui ferme périodiquement les workspaces
