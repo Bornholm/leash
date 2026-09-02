@@ -116,8 +116,62 @@ Each workspace gets its own engine (and thus its own MCP server subprocess), so 
 | `LEASH_DISC_HEADER`                | no        | `X-Workspace`        | Name of the HTTP header carrying the discriminant.                                                         |
 | `LEASH_DISC_URL_PARAM`             | no        | `workspace`          | Name of the URL path variable / query parameter carrying the discriminant.                                 |
 | `LEASH_MCP_LISTEN_ADDR`            | no        | `:8443`              | TCP listen address of the HTTP server.                                                                     |
+| `LEASH_SANDBOX_BACKEND`            | no        | `bwrap`              | Sandbox backend enforced for every workspace: `bwrap` or `chroot`. See "Sandbox backend" below.            |
+| `LEASH_MAX_FILE_BYTES`             | no        | `33554432` (32 MiB)  | Maximum size of a single file accepted by `PUT /files/…`.                                                  |
+| `LEASH_WORKSPACE_QUOTA_BYTES`      | no        | `268435456` (256 MiB)| Maximum cumulated size of a workspace's files. `0` disables the quota.                                      |
 
 If both the header and the URL variable are present on a request, **the header takes priority**.
+
+## Sandbox backend
+
+The sandbox backend is chosen by the **server operator**, never by an API key:
+
+- `LEASH_SANDBOX_BACKEND=bwrap` (default) — bubblewrap. Network, PID, IPC, UTS and user namespaces are unshared, and the workspace directory is the only read-write mount, on `/work`.
+- `LEASH_SANDBOX_BACKEND=chroot` — operational fallback for hosts where bubblewrap cannot run. The chroot backend knows nothing about bind mounts or namespaces: it cannot cut the network, and the workspace directory becomes the process working directory directly (no `/work`). When it is selected, **the effective security boundary is whatever isolates the server process itself** — typically the container it runs in. Only choose it knowingly.
+
+A per-key policy file can still shape `allowed_binaries`, builtins, MCP servers and the rest of the `sandbox:` section, but it can neither disable sandboxing nor pick a different backend.
+
+### Running bubblewrap inside a container
+
+Bubblewrap needs three things a container runtime denies by default. Under Docker, the working combination is:
+
+```bash
+docker run \
+  --security-opt seccomp=unconfined \
+  --security-opt apparmor=unconfined \
+  --security-opt systempaths=unconfined \
+  …
+```
+
+- `seccomp=unconfined` — the default seccomp profile blocks the `clone` flags needed to create an unprivileged user namespace.
+- `apparmor=unconfined` — the `docker-default` AppArmor profile refuses `mount --make-rslave /`, which bwrap does before pivoting.
+- `systempaths=unconfined` — Docker masks parts of `/proc`; while `/proc` is not fully visible, the kernel refuses to let a new procfs be mounted inside the namespace.
+
+Root is *not* required: the combination above works for an unprivileged container user. If these options cannot be granted, fall back to `LEASH_SANDBOX_BACKEND=chroot` (which does require root) and accept the reduced guarantees described above.
+
+## Files endpoints
+
+Binary payloads have no place in MCP tool results, which are textual and size-bounded. The server therefore exposes a small file API next to the MCP route, sharing its authentication, its discriminant resolution and its workspace lifecycle — a file request refreshes a workspace's TTL exactly like a tool call does.
+
+| Method   | Path            | Description                                                                       |
+| -------- | --------------- | --------------------------------------------------------------------------------- |
+| `PUT`    | `/files/{path}` | Write the request body to `{path}` in the caller's workspace. `201` + JSON result. |
+| `GET`    | `/files/{path}` | Return the file, with a `Content-Type` guessed from its extension.                 |
+| `DELETE` | `/files/{path}` | Delete the file (or directory) at `{path}`. `204`.                                 |
+| `GET`    | `/files/`       | List every regular file: `{"files":[{"path":…,"size":…}],"total_bytes":…}`.        |
+
+Rules:
+
+- Same `Authorization: Bearer` header and same discriminant (`X-Workspace` by default) as the MCP route. Unlike the MCP route, a missing discriminant is a `400`: no ephemeral workspace is created, since a file dropped in a workspace nobody can address again would only hide a client misconfiguration.
+- Paths are confined with [`os.Root`](https://pkg.go.dev/os#Root), not with a `Clean`-then-prefix check. A prefix check only inspects the string, so it still lets through a path whose intermediate component is a symlink out of the workspace — and the tenant's own shell can create such a symlink. `os.Root` resolves each component in the kernel and refuses to follow a link leaving the root.
+- A file larger than `LEASH_MAX_FILE_BYTES` is rejected with `413`; a write that would push the workspace past `LEASH_WORKSPACE_QUOTA_BYTES` is rejected with `507`. Overwriting an existing file does not count its previous size twice.
+
+```bash
+curl -X PUT --data-binary @clip.mp4 \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "X-Workspace: tenant-42" \
+  http://localhost:8443/files/clip.mp4
+```
 
 ## Example request
 

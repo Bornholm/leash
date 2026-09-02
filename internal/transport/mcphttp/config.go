@@ -42,6 +42,19 @@ type ServerConfig struct {
 	HTTPRateLimit rate.Limit
 	HTTPBurst     int
 
+	// SandboxBackend est le backend sandbox imposé à TOUS les workspaces,
+	// choisi par l'opérateur du serveur : "bwrap" (défaut) ou "chroot".
+	// Aucun fichier de policy par clé ne peut le changer ni le désactiver.
+	SandboxBackend string
+
+	// MaxFileBytes est la taille maximale d'un fichier accepté par les
+	// endpoints /files/.
+	MaxFileBytes int64
+
+	// WorkspaceQuotaBytes est la taille cumulée maximale des fichiers d'un
+	// workspace. 0 = illimité.
+	WorkspaceQuotaBytes int64
+
 	// TrustProxyHeaders permet d'extraire l'IP réelle depuis X-Forwarded-For / X-Real-IP.
 	// N'activer que si un reverse proxy de confiance contrôle ces headers.
 	TrustProxyHeaders bool
@@ -73,18 +86,20 @@ type APIKeyConfig struct {
 	PolicyFile string
 }
 
-
 const (
-	envHMACSecret       = "LEASH_HMAC_SECRET"
-	envWorkspaceRoot    = "LEASH_WORKSPACE_ROOT"
-	envTTL              = "LEASH_TTL"
-	envDiscHeader       = "LEASH_DISC_HEADER"
-	envDiscURLParam     = "LEASH_DISC_URL_PARAM"
-	envMaxWorkspaces    = "LEASH_MAX_WORKSPACES"
-	envMaxRequestBody   = "LEASH_MAX_REQUEST_BODY_BYTES"
-	envHTTPRateLimit    = "LEASH_HTTP_RATE_LIMIT"
-	envHTTPBurst        = "LEASH_HTTP_BURST"
-	envTrustProxy       = "LEASH_TRUST_PROXY_HEADERS"
+	envHMACSecret     = "LEASH_HMAC_SECRET"
+	envWorkspaceRoot  = "LEASH_WORKSPACE_ROOT"
+	envTTL            = "LEASH_TTL"
+	envDiscHeader     = "LEASH_DISC_HEADER"
+	envDiscURLParam   = "LEASH_DISC_URL_PARAM"
+	envMaxWorkspaces  = "LEASH_MAX_WORKSPACES"
+	envMaxRequestBody = "LEASH_MAX_REQUEST_BODY_BYTES"
+	envHTTPRateLimit  = "LEASH_HTTP_RATE_LIMIT"
+	envHTTPBurst      = "LEASH_HTTP_BURST"
+	envTrustProxy     = "LEASH_TRUST_PROXY_HEADERS"
+	envSandboxBackend = "LEASH_SANDBOX_BACKEND"
+	envMaxFileBytes   = "LEASH_MAX_FILE_BYTES"
+	envWorkspaceQuota = "LEASH_WORKSPACE_QUOTA_BYTES"
 
 	defaultWorkspaceRoot       = "./leash-workspaces"
 	defaultTTL                 = 30 * time.Minute
@@ -95,10 +110,19 @@ const (
 	defaultHTTPRateLimitCount  = 60
 	defaultHTTPBurst           = 20
 
+	defaultMaxFileBytes        = int64(32 << 20)  // 32 MiB
+	defaultWorkspaceQuotaBytes = int64(256 << 20) // 256 MiB
+
 	minHMACSecretLen = 32
 	minAPIKeyLen     = 20
 
 	apiKeyPrefix = "LEASH_APIKEY_"
+)
+
+// Backends sandbox acceptés par LEASH_SANDBOX_BACKEND.
+const (
+	SandboxBackendBwrap  = "bwrap"
+	SandboxBackendChroot = "chroot"
 )
 
 var apiKeyNamePattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
@@ -129,6 +153,32 @@ func LoadConfig() (*ServerConfig, error) {
 		MaxRequestBodyBytes: defaultMaxRequestBodyBytes,
 		HTTPBurst:           defaultHTTPBurst,
 		TrustProxyHeaders:   os.Getenv(envTrustProxy) == "true",
+		SandboxBackend:      getEnvDefault(envSandboxBackend, SandboxBackendBwrap),
+		MaxFileBytes:        defaultMaxFileBytes,
+		WorkspaceQuotaBytes: defaultWorkspaceQuotaBytes,
+	}
+
+	switch cfg.SandboxBackend {
+	case SandboxBackendBwrap, SandboxBackendChroot:
+	default:
+		return nil, fmt.Errorf("%s: invalid value %q, expected %q or %q",
+			envSandboxBackend, cfg.SandboxBackend, SandboxBackendBwrap, SandboxBackendChroot)
+	}
+
+	if raw := os.Getenv(envMaxFileBytes); raw != "" {
+		n, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || n <= 0 {
+			return nil, fmt.Errorf("%s: invalid value %q, expected positive integer (bytes)", envMaxFileBytes, raw)
+		}
+		cfg.MaxFileBytes = n
+	}
+
+	if raw := os.Getenv(envWorkspaceQuota); raw != "" {
+		n, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || n < 0 {
+			return nil, fmt.Errorf("%s: invalid value %q, expected non-negative integer (bytes)", envWorkspaceQuota, raw)
+		}
+		cfg.WorkspaceQuotaBytes = n
 	}
 
 	if raw := os.Getenv(envTTL); raw != "" {

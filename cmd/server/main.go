@@ -35,7 +35,7 @@ func run() error {
 		return fmt.Errorf("loading config: %w", err)
 	}
 
-	mgr := mcphttp.NewManager(cfg, mcphttp.ProductionFactory())
+	mgr := mcphttp.NewManager(cfg, mcphttp.ProductionFactory(cfg.SandboxBackend))
 	mgr.StartReaper(reapInterval)
 	defer mgr.Shutdown()
 

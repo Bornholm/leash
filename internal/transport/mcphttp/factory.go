@@ -31,7 +31,10 @@ import (
 // recevoir le vrai chemin hôte du workspace de la session qui l'invoque —
 // ces serveurs stdio tournent sur l'hôte (pas dans le sandbox), donc un
 // chemin interne au sandbox comme "/work" ne leur serait pas accessible.
-func ProductionFactory() engineFactory {
+//
+// backend est le backend sandbox imposé par l'opérateur ("bwrap" ou
+// "chroot") ; une valeur vide vaut "bwrap".
+func ProductionFactory(backend string) engineFactory {
 	return func(ctx context.Context, dir string, key *APIKeyConfig) (leash.Engine, func(), error) {
 		auditOpts := []leash.Option{
 			leash.WithAuditWriter(os.Stderr),
@@ -40,7 +43,7 @@ func ProductionFactory() engineFactory {
 
 		if key.PolicyFile == "" {
 			opts := append([]leash.Option{
-				leash.WithSandbox(hardenedSandbox(dir)),
+				leash.WithSandbox(hardenedSandbox(backend, dir)),
 				leash.WithBuiltinsDisabled(),
 				leash.WithWorkDir(dir),
 			}, auditOpts...)
@@ -63,7 +66,7 @@ func ProductionFactory() engineFactory {
 
 		opts := append([]leash.Option{
 			leash.WithPolicyFile(resolvedPath),
-			leash.WithSandbox(workspaceSandbox(polCfg.Sandbox, dir)),
+			leash.WithSandbox(workspaceSandbox(backend, polCfg.Sandbox, dir)),
 			leash.WithWorkDir(dir),
 		}, auditOpts...)
 		if len(key.Env) > 0 {
@@ -128,10 +131,9 @@ func writeResolvedPolicyFile(policyFile, dir string) (string, error) {
 //   - réseau, PID, IPC, UTS, user namespaces isolés
 //   - un seul montage en lecture-écriture : dir, monté sur /work
 //   - le process meurt si le parent meurt (pas de processus orphelin)
-func hardenedSandbox(dir string) sandbox.Config {
-	return sandbox.Config{
+func hardenedSandbox(backend, dir string) sandbox.Config {
+	return forceBackend(sandbox.Config{
 		Enabled: true,
-		Backend: "bwrap",
 		Workdir: "/work",
 		ReadonlyBinds: []string{
 			"/usr", "/bin", "/lib", "/lib64", "/etc",
@@ -147,7 +149,7 @@ func hardenedSandbox(dir string) sandbox.Config {
 			User:    true,
 		},
 		DieWithParent: true,
-	}
+	}, backend, dir)
 }
 
 // workspaceSandbox part de la configuration sandbox d'un fichier de policy
@@ -156,12 +158,9 @@ func hardenedSandbox(dir string) sandbox.Config {
 // binds additionnels, tmpfs, etc.) provient intégralement du fichier,
 // permettant par exemple à une clé d'autoriser le réseau pour joindre des
 // serveurs MCP distants.
-func workspaceSandbox(cfg sandbox.Config, dir string) sandbox.Config {
+func workspaceSandbox(backend string, cfg sandbox.Config, dir string) sandbox.Config {
 	out := cfg
 	out.Enabled = true
-	if out.Backend == "" || out.Backend == "none" {
-		out.Backend = "bwrap"
-	}
 	if out.Workdir == "" {
 		out.Workdir = "/work"
 	}
@@ -170,5 +169,36 @@ func workspaceSandbox(cfg sandbox.Config, dir string) sandbox.Config {
 	copy(binds, out.ReadwriteBinds)
 	out.ReadwriteBinds = append(binds, sandbox.BindMount{Source: dir, Target: out.Workdir})
 
+	return forceBackend(out, backend, dir)
+}
+
+// forceBackend impose le backend choisi par l'opérateur du serveur, quelle
+// que soit la valeur présente dans un fichier de policy par clé.
+//
+// Le backend chroot est un REPLI d'exploitation : il ne sait ni monter de
+// bind, ni couper le réseau. Quand il est retenu, la frontière de sécurité
+// effective est le conteneur qui héberge le serveur, et le répertoire réel
+// du workspace devient directement le répertoire de travail du processus.
+// Voir docs/mcp-http.md, section « Sandbox backend ».
+func forceBackend(cfg sandbox.Config, backend, dir string) sandbox.Config {
+	out := cfg
+	out.Enabled = true
+	switch backend {
+	case SandboxBackendChroot:
+		out.Backend = SandboxBackendChroot
+		if out.Rootfs == "" {
+			out.Rootfs = "/"
+		}
+		// Sans bind mount, /work n'existe pas : le processus travaille
+		// directement dans le répertoire hôte du workspace.
+		out.Workdir = dir
+		out.ReadwriteBinds = nil
+		out.ReadonlyBinds = nil
+	default:
+		out.Backend = SandboxBackendBwrap
+		if out.Workdir == "" {
+			out.Workdir = "/work"
+		}
+	}
 	return out
 }

@@ -56,6 +56,7 @@ func NewServer(cfg *ServerConfig, mgr *Manager) *Server {
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /healthz", http.HandlerFunc(healthzHandler))
+	s.registerFileRoutes(mux)
 	mux.Handle("/", mcpRoute)
 
 	// Middlewares communs à toutes les routes (y compris healthz).

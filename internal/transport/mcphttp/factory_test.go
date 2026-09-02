@@ -13,7 +13,7 @@ import (
 func TestWorkspaceSandbox_InjectsWorkspaceDirAsReadWriteBind(t *testing.T) {
 	cfg := sandbox.Config{} // fichier de policy sans section sandbox
 
-	out := workspaceSandbox(cfg, "/srv/leash/workspaces/abc123")
+	out := workspaceSandbox("", cfg, "/srv/leash/workspaces/abc123")
 
 	if !out.Enabled {
 		t.Fatal("expected sandbox to be enabled (C2 floor)")
@@ -45,7 +45,7 @@ func TestWorkspaceSandbox_PreservesCustomSandboxSettings(t *testing.T) {
 		},
 	}
 
-	out := workspaceSandbox(cfg, "/srv/leash/workspaces/tenant-b")
+	out := workspaceSandbox("", cfg, "/srv/leash/workspaces/tenant-b")
 
 	if out.Unshare.Network {
 		t.Fatal("expected Unshare.Network to stay false, as set by the per-key policy file")
@@ -79,7 +79,7 @@ func TestWorkspaceSandbox_PreservesCustomSandboxSettings(t *testing.T) {
 func TestWorkspaceSandbox_ForcesBwrapEvenIfFileDisablesSandbox(t *testing.T) {
 	cfg := sandbox.Config{Enabled: false, Backend: "none"}
 
-	out := workspaceSandbox(cfg, "/srv/leash/workspaces/tenant-c")
+	out := workspaceSandbox("", cfg, "/srv/leash/workspaces/tenant-c")
 
 	if !out.Enabled || out.Backend != "bwrap" {
 		t.Fatalf("expected bwrap to be forced regardless of the file (C2 floor), got Enabled=%v Backend=%q", out.Enabled, out.Backend)
@@ -90,7 +90,7 @@ func TestProductionFactory_DefaultsToHardenedSandboxAndDisabledBuiltinsWithoutPo
 	key := &APIKeyConfig{Name: "default"}
 	dir := t.TempDir()
 
-	eng, cleanup, err := ProductionFactory()(t.Context(), dir, key)
+	eng, cleanup, err := ProductionFactory("")(t.Context(), dir, key)
 	if err != nil {
 		t.Fatalf("factory: %v", err)
 	}
@@ -118,7 +118,7 @@ environment:
 	dir := t.TempDir()
 	key := &APIKeyConfig{Name: "tenant", PolicyFile: policyPath}
 
-	eng, cleanup, err := ProductionFactory()(t.Context(), dir, key)
+	eng, cleanup, err := ProductionFactory("")(t.Context(), dir, key)
 	if err != nil {
 		t.Fatalf("factory: %v", err)
 	}
@@ -150,7 +150,7 @@ environment:
 	dir := t.TempDir()
 	key := &APIKeyConfig{Name: "tenant", PolicyFile: policyPath}
 
-	eng, cleanup, err := ProductionFactory()(t.Context(), dir, key)
+	eng, cleanup, err := ProductionFactory("")(t.Context(), dir, key)
 	if err != nil {
 		t.Fatalf("factory: %v", err)
 	}
@@ -175,7 +175,7 @@ func TestProductionFactory_CleanupRemovesResolvedPolicyFile(t *testing.T) {
 
 	before, _ := os.ReadDir(os.TempDir())
 
-	_, cleanup, err := ProductionFactory()(t.Context(), dir, key)
+	_, cleanup, err := ProductionFactory("")(t.Context(), dir, key)
 	if err != nil {
 		t.Fatalf("factory: %v", err)
 	}
@@ -221,7 +221,58 @@ environment:
 	dir := t.TempDir()
 	key := &APIKeyConfig{Name: "tenant", PolicyFile: policyPath}
 
-	if _, _, err := ProductionFactory()(t.Context(), dir, key); err == nil {
+	if _, _, err := ProductionFactory("")(t.Context(), dir, key); err == nil {
 		t.Fatal("expected an error for a template referencing an unknown field")
+	}
+}
+
+func TestForceBackend_ChrootIgnoresPolicyBackendAndBinds(t *testing.T) {
+	// Une policy par clé qui réclame bwrap (ou n'importe quoi d'autre) ne
+	// peut pas contredire le backend choisi par l'opérateur.
+	cfg := sandbox.Config{
+		Enabled: true,
+		Backend: "bwrap",
+		Workdir: "/work",
+		ReadwriteBinds: []sandbox.BindMount{
+			{Source: "/etc/secrets", Target: "/secrets"},
+		},
+	}
+
+	out := forceBackend(cfg, SandboxBackendChroot, "/srv/leash/workspaces/tenant-d")
+
+	if out.Backend != SandboxBackendChroot {
+		t.Fatalf("Backend = %q, want %q", out.Backend, SandboxBackendChroot)
+	}
+	if out.Rootfs != "/" {
+		t.Fatalf("Rootfs = %q, want /", out.Rootfs)
+	}
+	if out.Workdir != "/srv/leash/workspaces/tenant-d" {
+		t.Fatalf("Workdir = %q, want le répertoire réel du workspace", out.Workdir)
+	}
+	if len(out.ReadwriteBinds) != 0 || len(out.ReadonlyBinds) != 0 {
+		t.Fatalf("binds conservés alors que chroot ne sait pas les honorer: %+v", out)
+	}
+}
+
+func TestForceBackend_PolicyCannotDisableSandbox(t *testing.T) {
+	cfg := sandbox.Config{Enabled: false, Backend: "none"}
+
+	out := forceBackend(cfg, SandboxBackendBwrap, "/srv/leash/workspaces/tenant-e")
+
+	if !out.Enabled {
+		t.Fatal("le sandbox a pu être désactivé par la policy")
+	}
+	if out.Backend != SandboxBackendBwrap {
+		t.Fatalf("Backend = %q, want %q", out.Backend, SandboxBackendBwrap)
+	}
+}
+
+func TestHardenedSandbox_ChrootBackend(t *testing.T) {
+	out := hardenedSandbox(SandboxBackendChroot, "/srv/leash/workspaces/tenant-f")
+	if out.Backend != SandboxBackendChroot {
+		t.Fatalf("Backend = %q, want chroot", out.Backend)
+	}
+	if out.Workdir != "/srv/leash/workspaces/tenant-f" {
+		t.Fatalf("Workdir = %q", out.Workdir)
 	}
 }

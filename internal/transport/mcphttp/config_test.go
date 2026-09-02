@@ -9,9 +9,9 @@ import (
 
 // Valeurs de test respectant les longueurs minimales d'entropie.
 const (
-	testHMACSecret    = "test-hmac-secret-for-unit-tests-only-00"  // 39 chars ≥ 32
-	testDefaultAPIKey = "raw-api-key-for-unit-tests-ok-here-yes"   // 38 chars ≥ 20
-	testTenantAAPIKey = "tenant-a-api-key-for-unit-tests-ok-yes"   // 38 chars ≥ 20
+	testHMACSecret    = "test-hmac-secret-for-unit-tests-only-00" // 39 chars ≥ 32
+	testDefaultAPIKey = "raw-api-key-for-unit-tests-ok-here-yes"  // 38 chars ≥ 20
+	testTenantAAPIKey = "tenant-a-api-key-for-unit-tests-ok-yes"  // 38 chars ≥ 20
 )
 
 func TestLoadConfig_FailsFastWithoutSecret(t *testing.T) {
@@ -245,5 +245,53 @@ func clearAPIKeyEnv(t *testing.T) {
 				_ = os.Setenv(k, prev)
 			}
 		})
+	}
+}
+
+func TestLoadConfig_SandboxBackendDefaultsToBwrap(t *testing.T) {
+	t.Setenv(envHMACSecret, "0123456789012345678901234567890123456789")
+	t.Setenv("LEASH_APIKEY_DEFAULT", "0123456789012345678901234567890")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.SandboxBackend != SandboxBackendBwrap {
+		t.Fatalf("SandboxBackend = %q, want bwrap", cfg.SandboxBackend)
+	}
+	if cfg.MaxFileBytes != defaultMaxFileBytes {
+		t.Fatalf("MaxFileBytes = %d, want %d", cfg.MaxFileBytes, defaultMaxFileBytes)
+	}
+	if cfg.WorkspaceQuotaBytes != defaultWorkspaceQuotaBytes {
+		t.Fatalf("WorkspaceQuotaBytes = %d, want %d", cfg.WorkspaceQuotaBytes, defaultWorkspaceQuotaBytes)
+	}
+}
+
+func TestLoadConfig_SandboxBackendChrootIsAccepted(t *testing.T) {
+	t.Setenv(envHMACSecret, "0123456789012345678901234567890123456789")
+	t.Setenv("LEASH_APIKEY_DEFAULT", "0123456789012345678901234567890")
+	t.Setenv(envSandboxBackend, "chroot")
+	t.Setenv(envMaxFileBytes, "1024")
+	t.Setenv(envWorkspaceQuota, "8192")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.SandboxBackend != SandboxBackendChroot {
+		t.Fatalf("SandboxBackend = %q, want chroot", cfg.SandboxBackend)
+	}
+	if cfg.MaxFileBytes != 1024 || cfg.WorkspaceQuotaBytes != 8192 {
+		t.Fatalf("bornes fichiers = %d / %d", cfg.MaxFileBytes, cfg.WorkspaceQuotaBytes)
+	}
+}
+
+func TestLoadConfig_UnknownSandboxBackendFails(t *testing.T) {
+	t.Setenv(envHMACSecret, "0123456789012345678901234567890123456789")
+	t.Setenv("LEASH_APIKEY_DEFAULT", "0123456789012345678901234567890")
+	t.Setenv(envSandboxBackend, "docker")
+
+	if _, err := LoadConfig(); err == nil {
+		t.Fatal("attendu une erreur pour un backend inconnu")
 	}
 }
